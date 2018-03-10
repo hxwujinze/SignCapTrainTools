@@ -1,6 +1,5 @@
 # coding:utf-8
 
-import warnings
 from numpy import *
 from sklearn import preprocessing
 
@@ -20,8 +19,8 @@ from sklearn.cross_validation import train_test_split
 warnings.filterwarnings("ignore")
 import os
 
-SIGN_COUNT = 14
-BATCH_AMOUNT = 6
+SIGN_COUNT = 10
+BATCH_AMOUNT = 2
 
 def file2matrix(filename, del_sign, separator, Data_Columns):
     fr = open(filename, 'r')

@@ -1,69 +1,77 @@
 # coding:utf-8
 from __future__ import division
 from __future__ import print_function
-from myo import init, Hub, Feed, StreamEmg
-import time
-import pythoncom
-import pyHook
-import threading
+
 import os
 import shutil
+import threading
+import time
 
-tagGesture = 0
-tagNext = 0
-capture_frequency = 100
+import pyHook
+import pythoncom
+from myo import init, Hub, Feed, StreamEmg
+
+CAPTURE_FREQUENCY = 100
+
+STATE_END_OF_CAPTURE = -1
+STATE_START_CAPTURE = 0
+STATE_CAPTURING = 1
+
+capture_state = 0
+next_tag_num = 0
 
 class Myos(object):
     def __init__(self, myo_device):
         self._myo_device = myo_device
         self._time = 0
-        self._t_s = 1 / capture_frequency
+        self._t_s = 1 / CAPTURE_FREQUENCY
         self.Emg = []
         self.Acc = []
         self.Gyr = []
-        self.output = list()
 
     def start(self):
         startTime = time.time()
         printTime = time.time()
-        printlist = ["|", "/", "-", "\\", "-> "]
-        i = 0
         while True:
             currentTime = time.time()
             if (currentTime - startTime) > self._t_s:
                 startTime = time.time()
                 self.writeAllData()
-            if currentTime - printTime > 0.5 and tagGesture == 1:
+            if currentTime - printTime > 0.5 and capture_state == 1:
                 printTime = time.time()
-                print('\b', end='')
-                print(printlist[i], end='')
-                i = i + 1
-                if i > 4:
-                    i = 0
-                    print(printlist[i], end='')
+                print(' . ')
 
     def getAllData(self):
-        global tagNext
-        self.Emg = self._myo_device[0].emg + (tagNext,)
-        self.Acc = [it for it in self._myo_device[0].acceleration]
-        self.Gyr = [it for it in self._myo_device[0].gyroscope]
+        global next_tag_num
+        self.Emg.append(self._myo_device[0].emg + (next_tag_num,))
+        self.Acc.append([it for it in self._myo_device[0].acceleration])
+        self.Gyr.append([it for it in self._myo_device[0].gyroscope])
 
     def writeAllData(self):
-        global tagGesture
-        global tagNext
-        if tagGesture == -1:
+        global capture_state
+        global next_tag_num
+        if capture_state == STATE_END_OF_CAPTURE:
             savefile(self)
-            tagGesture = 0
+            capture_state = STATE_START_CAPTURE
+            self.Emg = []
+            self.Acc = []
+            self.Gyr = []
         else:
-            self.getAllData()
-            self.output.append(self.Emg)
-            self.output.append(self.Acc)
-            self.output.append(self.Gyr)
+            if capture_state == STATE_CAPTURING:
+                self.getAllData()
+
+    def get_capture_data_list(self):
+        return [self.Emg, self.Acc, self.Gyr]
 
 def savefile(capture_obj):
     for index, r in enumerate(["Emg#.txt", "Acceleration#.txt", "Gyroscope#.txt"]):
-        with open(r, "a") as text_file:
-            text_file.write("{0}\n".format(capture_obj.output[index]))
+        with open(r, "w") as text_file:
+            # [ emg, acc, gyr]
+            data_out_put = capture_obj.get_capture_data_list()
+            str_res = ''
+            for each_line in data_out_put[index]:
+                str_res += (str(each_line) + '\n')
+            text_file.write(str_res)
     path = os.getcwd()
     OriFiles = os.listdir(path)
     fileList = [file for file in OriFiles if file.endswith("#.txt")]
@@ -94,26 +102,26 @@ def getkeyboard():
     pythoncom.PumpMessages()
 
 def onKeyboardEvent(event):
-    global tagGesture
-    global tagNext
+    global capture_state
+    global next_tag_num
     # print "Key:", event.Key
 
     if event.Key == "Escape":
-        if tagGesture != -1:
+        if capture_state != STATE_END_OF_CAPTURE:
             print("\n###  gesture end and save files:  ###")
-        tagGesture = -1
+            capture_state = STATE_END_OF_CAPTURE
 
     if event.Key == "Return":
-        if tagGesture != 1:
+        if capture_state != STATE_CAPTURING:
             print(" ")
             print("#########  gesture start:  ##########")
-            tagNext = 0
-        tagGesture = 1
+            next_tag_num = 0
+            capture_state = STATE_CAPTURING
 
     if event.Key == "T":
-        if tagGesture == 1:
-            print("\bTag " + str(tagNext + 1) + " ")
-            tagNext += 1
+        if capture_state == STATE_CAPTURING:
+            print("\bTag " + str(next_tag_num + 1) + " ")
+            next_tag_num += 1
 
 if __name__ == "__main__":
     # 使用debug模式可以正常工作？？？
@@ -137,3 +145,4 @@ if __name__ == "__main__":
         print("Quitting ...")
     finally:
         hub.shutdown()
+

@@ -1,7 +1,9 @@
 # coding:utf-8
 from __future__ import print_function
-from numpy import *
+
 import os
+
+from numpy import *
 
 u'''
 测试数据长度是否ok
@@ -11,7 +13,7 @@ u'''
 '''
 
 SIGN_COUNT = 14
-BATCH_NUM = '7'
+BATCH_NUM = '2'
 
 def file2matrix(filename, del_sign, separator, Data_Columns):
     fr = open(filename, 'r')
@@ -81,10 +83,12 @@ if __name__ == "__main__":
     print('unsatisfied data length')
     for i in range(len(EMG)):
         Seg = Segmentation(EMG[i], 20)
-        print('in batch num %d' % (i + 1))
+        result = ''
         for j in range(len(Seg)):
-            if len(Seg[j]) < 162:
-                print('%d ,' % j, end='')
+            if len(Seg[j]) < 165:
+                result += ('{0}, '.format(j + 1))
+        if result != '':
+            result = 'in batch num %d\n' % (i + 1) + result
+            print(result)
         # else:
         # print len(Seg[j]),
-        print('\n')
