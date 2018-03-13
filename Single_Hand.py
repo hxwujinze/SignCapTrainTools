@@ -21,6 +21,7 @@ capture_state = 0
 next_tag_num = 0
 
 class Myos(object):
+
     def __init__(self, myo_device):
         self._myo_device = myo_device
         self._time = 0
@@ -32,6 +33,7 @@ class Myos(object):
     def start(self):
         startTime = time.time()
         printTime = time.time()
+
         while True:
             currentTime = time.time()
             if (currentTime - startTime) > self._t_s:

@@ -1,8 +1,6 @@
 # coding:utf-8
 from __future__ import print_function
 
-import os
-
 from numpy import *
 
 u'''
@@ -12,8 +10,8 @@ u'''
 
 '''
 
-SIGN_COUNT = 14
-BATCH_NUM = '2'
+SIGN_COUNT = 4
+BATCH_NUM = '5'
 
 def file2matrix(filename, del_sign, separator, Data_Columns):
     fr = open(filename, 'r')

@@ -1,26 +1,16 @@
 # coding:utf-8
 
-from numpy import *
-from sklearn import preprocessing
-
-warnings.filterwarnings("ignore")
-from sklearn.svm import SVC
-
-warnings.filterwarnings("ignore")
-from sklearn.externals import joblib
-
-warnings.filterwarnings("ignore")
-warnings.filterwarnings("ignore")
-from sklearn import cross_validation
-
-warnings.filterwarnings("ignore")
-from sklearn.cross_validation import train_test_split
-
-warnings.filterwarnings("ignore")
 import os
 
-SIGN_COUNT = 10
-BATCH_AMOUNT = 2
+from numpy import *
+from sklearn import preprocessing
+from sklearn.cross_validation import train_test_split
+from sklearn.externals import joblib
+from sklearn.model_selection import cross_val_score
+from sklearn.svm import SVC
+
+SIGN_COUNT = 14
+BATCH_AMOUNT = 9
 
 def file2matrix(filename, del_sign, separator, Data_Columns):
     fr = open(filename, 'r')
@@ -66,7 +56,7 @@ def Length_Adjust(A, Standard_Length):
         End = len(A) - Leng / 2
         Re = Leng % 2
         Begin = Leng / 2 + Re
-        A1 = A[Begin:End, :]
+        A1 = A[int(Begin):int(End), :]
     return A1
 
 def Segmentation(Data_EMG, Data_ACC, Data_GYR, Num_Seg):
@@ -140,7 +130,9 @@ def Feature_Etraction(Seg_data, Size_Window, width_data):
                     Seg_ZC_Feat = vstack((Seg_ZC_Feat, ZC_Feat))
                     Seg_ARC_Feat = vstack((Seg_ARC_Feat, ARC_Feat))
                 Win_index += 1
-
+            # 在这里，将手语的数据向量进行一些数据处理之后
+            # 再拼接成一个长的一维向量作为SVM的输入
+            # highly suspected
             Seg_Feat = vstack((Seg_RMS_Feat, Seg_ZC_Feat, Seg_ARC_Feat))
             All_Seg_Feat = (Seg_Feat.T).ravel()
             if Gest_index == 0:
@@ -182,15 +174,17 @@ def Standardization(All_Feat):
     savetxt('scale.txt', max_abs_scaler.scale_)
     return Norm_Feat
 
-def Train_SVM(Norm_Feat, All_Label, C0=256, G0=0.0175):
+# http://scikit-learn.org/stable/modules/generated/sklearn.svm.SVC.html#sklearn.svm.SVC
+def Train_SVM(Norm_Feat, All_Label, C0=5, G0='auto'):
+    # def Train_SVM(Norm_Feat, All_Label, C0=256, G0=0.0175):
     clf = SVC(kernel='rbf', C=C0, gamma=G0)
     scores = []
     for i in range(10):
         data_train, data_test, target_train, target_test = train_test_split(Norm_Feat, All_Label)
-        clf.fit(Norm_Feat, All_Label)
-        # clf.fit(data_train,target_train)
+        # clf.fit(Norm_Feat, All_Label)
+        clf.fit(data_train, target_train)
         joblib.dump(clf, "train_model.m")
-        scores1 = cross_validation.cross_val_score(clf, data_test, target_test, cv=4)
+        scores1 = cross_val_score(clf, data_test, target_test, cv=4)
         scores += list(scores1)
     return scores
 
