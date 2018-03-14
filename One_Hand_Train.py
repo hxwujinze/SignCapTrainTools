@@ -1,7 +1,5 @@
 # coding:utf-8
 
-import os
-
 from numpy import *
 from sklearn import preprocessing
 from sklearn.cross_validation import train_test_split
@@ -46,16 +44,18 @@ def Load_ALL_Data(Path, Num_SLR, Width_EMG, Width_ACC, Width_GYR, Index_Folder):
 
     return Data_EMG, Data_ACC, Data_GYR
 
-def Length_Adjust(A, Standard_Length):
-    Leng = len(A) - Standard_Length
+def Length_Adjust(A):
+    LENGTH = 160
+    Leng = len(A) - LENGTH
     if Leng < 0:
         print(A)
         print ('Length Error')
         A1 = A
     else:
+        # 前后各去掉多出来长度的一半
         End = len(A) - Leng / 2
-        Re = Leng % 2
-        Begin = Leng / 2 + Re
+        rest = Leng % 2
+        Begin = Leng / 2 + rest
         A1 = A[int(Begin):int(End), :]
     return A1
 
