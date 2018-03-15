@@ -1,5 +1,6 @@
 import os
 import pickle
+import random
 import time
 
 import numpy as np
@@ -13,12 +14,25 @@ def getMaxIndex(tensor):
     tensor = torch.max(tensor, dim=1)[1]
     return torch.squeeze(tensor).data.int()
 
+# normalize
+def scale_data_block(data_block):
+    for each_line in data_block:
+        for each_feat_dim in range(len(SCALE)):
+            each_line[each_feat_dim] /= SCALE[each_feat_dim]
+
+
+
 DATA_DIR_PATH = os.getcwd() + '\\data'
+BATCH_SIZE = 8
 
 # load data
 f = open(DATA_DIR_PATH + '\\data_set', 'r+b')
 rawData = pickle.load(f)
+rawData = rawData[1]
+# train_data => (batch_amount, data_set)
 f.close()
+
+random.shuffle(rawData)
 
 f = open(DATA_DIR_PATH + '\\scale', 'r+b')
 SCALE = pickle.load(f)
@@ -27,11 +41,6 @@ f.close()
 CUDA_AVAILABLE = torch.cuda.is_available()
 print('cuda_status: %s' % str(CUDA_AVAILABLE))
 
-# normalize
-def scale_data_block(data_block):
-    for each_line in data_block:
-        for each_feat_dim in range(len(SCALE)):
-            each_line[each_feat_dim] /= SCALE[each_feat_dim]
 
 # process data
 dataInput, dataLabel = [], []
@@ -58,7 +67,7 @@ trainingSet = Data.TensorDataset(data_tensor=trainingInput,
                                  target_tensor=trainingLabel)
 loader = Data.DataLoader(
     dataset=trainingSet,
-    batch_size=20,  # should be tuned when data become bigger
+    batch_size=8,  # should be tuned when data become bigger
     shuffle=True
 )
 
@@ -71,8 +80,12 @@ class LSTM(nn.Module):
 
             hidden_size=20,  # hidden size of rnn layers
             num_layers=2,  # the number of rnn layers
+
             batch_first=True,
-            dropout=0.5)  # ??
+            dropout=0.5)
+        # dropout :
+        # 在训练时，每次随机（如 50% 概率）忽略隐层的某些节点；
+        # 这样，我们相当于随机从 2^H 个模型中采样选择模型；同时，由于每个网络只见过一个训练数据
 
         self.out = nn.Linear(20, 12)  # use soft max classifier.
         self.out2 = nn.Linear(12, 14)
@@ -88,7 +101,10 @@ class LSTM(nn.Module):
 
 # define loss function and optimizer
 model = LSTM()
+model.cuda()
+# 转换为GPU对象
 model.train()
+
 loss_func = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 # learning rate can be tuned for better performance
@@ -97,15 +113,27 @@ start_time_raw = time.time()
 start_time = time.strftime('%H:%M:%S', time.localtime(start_time_raw))
 print('start_at: %s' % start_time)
 
+# batch_list = []
+#  转换为GPU：
+#  Variable(batch_x).cuda  所有Variable全部转换为gpu运算的对象（放入显存）
+#  先提前都装入显存中
+# for batch_x, batch_y in loader:
+#     batch_list.append((Variable(batch_x).cuda(), Variable(batch_y).cuda()))
+
+
 # start training
 # epoch : 用所有训练数据跑一遍称为一次epoch
-for epoch in range(0, 1001):
+for epoch in range(0, 501):
+
+    # for each_batch in batch_list:
+    #     batch_x = each_batch[0]
+    #     batch_y = each_batch[1]
+
     for batch_x, batch_y in loader:
-        # 转换为GPU：
-        # Variable(batch_x).cuda  所有Variable全部转换为gpu运算
 
         batch_x = Variable(batch_x)
         batch_y = Variable(batch_y)
+
         batch_out = model(batch_x)
         batch_out = torch.squeeze(batch_out)
         loss = loss_func(batch_out, batch_y)
@@ -115,8 +143,9 @@ for epoch in range(0, 1001):
         optimizer.step()
     if epoch % 20 == 0:
         model.eval()
-        testInput_ = Variable(testInput)
-        testOuput_ = model(testInput_)
+        testInput_ = Variable(testInput)  # .cuda()  # 转换在gpu内跑识别
+        testOuput_ = model(testInput_)  # .cpu()     # 从gpu中取回cpu算准确度
+        # 需要从gpu的显存中取回内存进行计算正误率
         testOuput_ = getMaxIndex(testOuput_)
         testOuput_ = testOuput_.numpy()
         testLabel_ = testLabel.numpy()
@@ -138,6 +167,11 @@ cost_time = end_time_raw - start_time_raw
 cost_time = time.strftime('%H:%M:%S', time.gmtime(cost_time, ))
 print('cost time: %s' % cost_time)
 
-torch.save(model.state_dict(), 'model_param.pkl')
+end_time = time.strftime('%m-%d,%H-%M', time.localtime(end_time_raw))
+torch.save(model.state_dict(), 'model_param%s.pkl' % end_time)
+
+file = open('models_info_%s' % end_time, 'w')
+file.writelines('batch_size:%d\nacc_result:%d' % (BATCH_SIZE, result))
+file.close()
 # how to read? :
 # model.load_state_dict(torch.load('model_param.pkl'))

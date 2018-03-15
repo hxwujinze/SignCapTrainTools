@@ -6,10 +6,10 @@ torch: 0.1.11
 matplotlib
 torchvision
 """
-# import torchvision.datasets as dsets
-# import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 import torch
+import torchvision.datasets as dsets
+import torchvision.transforms as transforms
 from torch import nn
 from torch.autograd import Variable
 

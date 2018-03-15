@@ -169,9 +169,19 @@ def ARC(Win_Data):
     return AR_coefficient
 
 def pickle_to_file(batch_num):
-    scale = [-999999999 for a in range(84)]
-    train_data = []
-    for each_batch in range(1, batch_num + 1):
+    file = open(DATA_DIR_PATH + '\\scale', 'r+b')
+    scale = pickle.load(file)
+    file.close()
+
+    file = open(DATA_DIR_PATH + '\\data_set', 'r+b')
+    train_data = pickle.load(file)
+    file.close()
+    # train_data => (batch_amount, data_set)
+
+    curr_batch_num = train_data[0]
+    train_data = train_data[1]
+
+    for each_batch in range(curr_batch_num + 1, batch_num + 1):
         for each_sign in range(1, 15):
             raw_data_set = Load_ALL_Data(batch_num=each_batch, sign_id=each_sign)
             data_set = []
@@ -194,6 +204,10 @@ def pickle_to_file(batch_num):
                         batch_mat = np.vstack((batch_mat, line))
 
                 train_data.append((each_sign, batch_mat))
+
+    curr_data_set_cont = batch_num
+    train_data = (curr_data_set_cont, train_data)
+    # (batch_amount, data_set)
     file = open(DATA_DIR_PATH + '\\data_set', 'w+b')
     pickle.dump(train_data, file)
     file.close()
