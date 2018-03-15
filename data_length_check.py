@@ -10,8 +10,8 @@ u'''
 
 '''
 
-SIGN_COUNT = 4
-BATCH_NUM = '5'
+SIGN_COUNT = 14
+BATCH_NUM = '2'
 
 def file2matrix(filename, del_sign, separator, Data_Columns):
     fr = open(filename, 'r')
@@ -57,7 +57,7 @@ def Segmentation(Data, Num_Seg):
     Seg_index = list(Data[:, -1])
     for i in Seg_index:
         Num[i] = Num.get(i, 0) + 1
-    Seg = range(Num_Seg)
+    Seg = [0 for each in range(Num_Seg)]
     Index = Num[0]
     for i in range(Num_Seg):
         Seg[i] = Data[Index: Index + Num[i + 1]]

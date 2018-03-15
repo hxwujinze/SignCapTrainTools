@@ -1,5 +1,4 @@
 # coding:utf-8
-import warnings
 from numpy import *
 from sklearn import preprocessing
 
@@ -175,13 +174,13 @@ def Standardization(All_Feat):
     max_abs_scaler = preprocessing.MaxAbsScaler()
     Norm_Feat = max_abs_scaler.fit_transform(All_Feat)
     savetxt('scale.txt', max_abs_scaler.scale_)
-    print len(max_abs_scaler.scale_)
+    print(len(max_abs_scaler.scale_))
     return Norm_Feat
 
 def Train_SVM(Norm_Feat, All_Label, C0=256, G0=0.0175):
     clf = SVC(kernel='rbf', C=C0, gamma=G0)
     scores = []
-    for i in xrange(10):
+    for i in range(10):
         data_train, data_test, target_train, target_test = train_test_split(Norm_Feat, All_Label)
         clf.fit(Norm_Feat, All_Label)
         # clf.fit(data_train,target_train)

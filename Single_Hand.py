@@ -11,6 +11,8 @@ import pyHook
 import pythoncom
 from myo import init, Hub, Feed, StreamEmg
 
+DATA_DIR_PATH = os.getcwd() + '\\data'
+
 CAPTURE_FREQUENCY = 100
 
 STATE_END_OF_CAPTURE = -1
@@ -74,7 +76,7 @@ def savefile(capture_obj):
             for each_line in data_out_put[index]:
                 str_res += (str(each_line) + '\n')
             text_file.write(str_res)
-    path = os.getcwd()
+    path = DATA_DIR_PATH
     OriFiles = os.listdir(path)
     fileList = [file for file in OriFiles if file.endswith("#.txt")]
     for file in fileList:
