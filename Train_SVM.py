@@ -173,7 +173,7 @@ def Add_Label(Com_Feat):
 def Standardization(All_Feat):
     max_abs_scaler = preprocessing.MaxAbsScaler()
     Norm_Feat = max_abs_scaler.fit_transform(All_Feat)
-    savetxt('scale.txt', max_abs_scaler.scale_)
+    savetxt('scale_rnn.txt', max_abs_scaler.scale_)
     print(len(max_abs_scaler.scale_))
     return Norm_Feat
 

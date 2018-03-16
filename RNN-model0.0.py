@@ -10,8 +10,11 @@ import torch.nn.functional as F
 import torch.utils.data as Data
 from torch.autograd import Variable
 
+# 由于softmax输出的是十四个概率值 于是取最大的那个就是最可能正确的答案
+# 取最大值 并且转换为int
 def getMaxIndex(tensor):
     tensor = torch.max(tensor, dim=1)[1]
+    # 对矩阵延一个固定方向取最大值
     return torch.squeeze(tensor).data.int()
 
 # normalize
@@ -28,13 +31,18 @@ BATCH_SIZE = 8
 # load data
 f = open(DATA_DIR_PATH + '\\data_set', 'r+b')
 rawData = pickle.load(f)
-rawData = rawData[1]
-# train_data => (batch_amount, data_set)
 f.close()
+
+# 检查rawData中 feedback数据集是否存在
+try:
+    rawData = rawData[1].extend(rawData[2])
+except IndexError:
+    rawData = rawData[1]
+# train_data => (batch_amount, data_set)
 
 random.shuffle(rawData)
 
-f = open(DATA_DIR_PATH + '\\scale', 'r+b')
+f = open(DATA_DIR_PATH + '\\scale_rnn', 'r+b')
 SCALE = pickle.load(f)
 f.close()
 
@@ -87,7 +95,10 @@ class LSTM(nn.Module):
         # 在训练时，每次随机（如 50% 概率）忽略隐层的某些节点；
         # 这样，我们相当于随机从 2^H 个模型中采样选择模型；同时，由于每个网络只见过一个训练数据
 
-        self.out = nn.Linear(20, 12)  # use soft max classifier.
+        self.out = nn.Linear(20, 12)
+        # use soft max classifier.
+        # 在输出层中间加了层softmax 用于分类
+        # softmax将会输出这十四个结果每个可能是正确的概率
         self.out2 = nn.Linear(12, 14)
 
     def forward(self, x):
@@ -101,9 +112,12 @@ class LSTM(nn.Module):
 
 # define loss function and optimizer
 model = LSTM()
-model.cuda()
+
+# model.cuda()
 # 转换为GPU对象
+
 model.train()
+# 转换为训练模式
 
 loss_func = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
@@ -143,10 +157,16 @@ for epoch in range(0, 501):
         optimizer.step()
     if epoch % 20 == 0:
         model.eval()
+        # 转换为求值模式
+
         testInput_ = Variable(testInput)  # .cuda()  # 转换在gpu内跑识别
+        # 转换为可读取的输入 Variable
+        # 如下进行nn的正向使用 分类
         testOuput_ = model(testInput_)  # .cpu()     # 从gpu中取回cpu算准确度
         # 需要从gpu的显存中取回内存进行计算正误率
         testOuput_ = getMaxIndex(testOuput_)
+        # softmax是14个概率的输出
+        # test数据是连续的100个输入 于是输出也是一个 100 * 14 的矩阵
         testOuput_ = testOuput_.numpy()
         testLabel_ = testLabel.numpy()
         right = 0
