@@ -11,7 +11,7 @@ import pyHook
 import pythoncom
 from myo import init, Hub, Feed, StreamEmg
 
-DATA_DIR_PATH = os.getcwd() + '\\data'
+DATA_DIR_PATH = os.getcwd()
 
 CAPTURE_FREQUENCY = 100
 

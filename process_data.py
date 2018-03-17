@@ -111,7 +111,7 @@ def print_plot(data_set, data_cap_type, data_feat_type):
         capture_times = capture_times if capture_times < 11 else 11
         # 最多只绘制十次采集的数据 （太多了会看不清）
         handle_lines_map = {}
-        for capture_num in range(1, capture_times):
+        for capture_num in range(0, capture_times):
             single_capture_data = trans_data_to_time_seqs(data_set[data_feat_type][capture_num])
             data = single_capture_data[dimension]
             l = plt.plot(range(len(data)), data, '.-', label='cap %d' % capture_num)
@@ -321,27 +321,40 @@ def load_from_file_feed_back():
     并转换为符合绘图and训练数据的形式
     :return:[  [ dict(三种采集类型数据)该种手语的每次采集数据 ,... ] 每种手语 ,...]
     """
-    file = open('feedback_data_set', 'r+b')
-    feedback_data_set = pickle.load(file)
-    # [ (sign_id, data), .....  ]
-    file.close()
-    data_set = list(range(SIGN_COUNT))
-    for each_cap in feedback_data_set:
-        data_set[each_cap[0]] = each_cap[1]
-    return data_set
+    file_name = ''
+    for root, dirs, files in os.walk(DATA_DIR_PATH):
+        for file_name in files:
+            if file_name.startswith('feedback_data'):
+                file_name = DATA_DIR_PATH + '\\' + file_name
+                file = open(file_name, 'r+b')
+                # file = open('data_aaa', 'r+b')
+                feedback_data_set = pickle.load(file)
+                # [ (sign_id, data), .....  ]
+                file.close()
+                data_set = list(range(SIGN_COUNT))
+                for each_cap in feedback_data_set:
+                    data_set[each_cap[0]] = each_cap[1]
+                return data_set
+    if file_name == '':
+        print('feedback_data not find ')
+
+
 
 def main():
     sign_id = 4
     # 从采集文件获取数据
-    # data_set = Load_ALL_Data(sign_id=sign_id, batch_num=3)
+    # data_set = Load_ALL_Data(sign_id=sign_id, batch_num=10)
     # 从feedback文件获取数据
     data_set = load_from_file_feed_back()[sign_id]
 
     # 数据采集类型 emg acc gyr
-    data_cap_type = 'emg'
+    data_cap_type = 'gyr'
 
     # 数据特征类型 zc rms arc
     data_feat_type = 'raw'
+
+    # for i in range(len(data_set[data_cap_type] )):
+    #     data_set[data_cap_type][i] = np.array(data_set[data_cap_type][i])
 
     data_set = feature_extract(data_set, data_cap_type)
     print_plot(data_set, data_cap_type, data_feat_type)

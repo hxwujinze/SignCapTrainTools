@@ -1,6 +1,8 @@
 # coding:utf-8
 from __future__ import print_function
 
+import os
+
 from numpy import *
 
 u'''
@@ -10,8 +12,8 @@ u'''
 
 '''
 
-SIGN_COUNT = 14
-BATCH_NUM = '2'
+SIGN_COUNT = 1
+BATCH_NUM = '10'
 
 def file2matrix(filename, del_sign, separator, Data_Columns):
     fr = open(filename, 'r')
@@ -66,7 +68,7 @@ def Segmentation(Data, Num_Seg):
 
 if __name__ == "__main__":
 
-    Path = os.getcwd()
+    Path = os.getcwd() + '\\data'
 
     EMG, ACC, GYR = Load_ALL_Data(Path, SIGN_COUNT, 9, 3, 3)
 
