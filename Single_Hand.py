@@ -61,6 +61,7 @@ class Myos(object):
             self.Acc = []
             self.Gyr = []
         else:
+
             if capture_state == STATE_CAPTURING:
                 self.getAllData()
 

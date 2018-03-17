@@ -4,6 +4,7 @@ import pickle
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.legend_handler import HandlerLine2D
 
 Width_EMG = 9
 Width_ACC = 3
@@ -104,15 +105,18 @@ def trans_data_to_time_seqs(data_set):
 
 def print_plot(data_set, data_cap_type, data_feat_type):
     for dimension in range(TYPE_LEN[data_cap_type]):
-        fig_acc = plt.figure()
+        fig_acc = plt.figure(figsize=(700, 400))
         fig_acc.add_subplot(111, title='%s %s dim%s' % (data_feat_type, data_cap_type, str(dimension + 1)))
         capture_times = len(data_set[data_feat_type])
-        capture_times = capture_times if capture_times < 10 else 10
+        capture_times = capture_times if capture_times < 11 else 11
         # 最多只绘制十次采集的数据 （太多了会看不清）
+        handle_lines_map = {}
         for capture_num in range(1, capture_times):
             single_capture_data = trans_data_to_time_seqs(data_set[data_feat_type][capture_num])
             data = single_capture_data[dimension]
-            plt.plot(range(len(data)), data, '-')
+            l = plt.plot(range(len(data)), data, '.-', label='cap %d' % capture_num)
+            handle_lines_map[l[0]] = HandlerLine2D(numpoints=1)
+        plt.legend(handler_map=handle_lines_map)
 
     plt.show()
 
@@ -329,12 +333,12 @@ def load_from_file_feed_back():
 def main():
     sign_id = 4
     # 从采集文件获取数据
-    data_set = Load_ALL_Data(sign_id=sign_id, batch_num=3)
+    # data_set = Load_ALL_Data(sign_id=sign_id, batch_num=3)
     # 从feedback文件获取数据
-    # data_set = load_from_file_feed_back()[sign_id]
+    data_set = load_from_file_feed_back()[sign_id]
 
     # 数据采集类型 emg acc gyr
-    data_cap_type = 'acc'
+    data_cap_type = 'emg'
 
     # 数据特征类型 zc rms arc
     data_feat_type = 'raw'
@@ -344,11 +348,6 @@ def main():
 
     # 将采集数据转换为训练数据
     # pickle_to_file(batch_num=9)
-
-
-
-
-
 
 if __name__ == "__main__":
     main()
