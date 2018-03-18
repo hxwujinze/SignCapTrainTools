@@ -9,7 +9,9 @@ from Tkinter import TOP, LEFT, END
 import myo
 from myo import VibrationType
 
-CAPTURE_FREQUENCY = 100
+DATA_PATH = os.getcwd() + '\\data'
+TYPE_LIST = ['acc', 'emg', 'gyr']
+SIGN_COUNT = 1
 
 STATE_END_OF_CAPTURE = -1
 # 一个手势的一次采集结束
@@ -51,7 +53,7 @@ class CaptureStore:
     def __init__(self):
         # 检查当前是否有上次的缓存 有则录入 无则生成
         try:
-            file_ = open('tmp_collection.data', 'r+b')
+            file_ = open('.\\tmp_collection.data', 'r+b')
             tmp_data = pickle.load(file_)
             file_.close()
             # 从tmp文件中展开对象
@@ -63,8 +65,8 @@ class CaptureStore:
             # 当前手语每次采集的数据
             self.curr_capture_sign_num = len(self.capture_data)
             # 当前手语id
-        except:
-            self.capture_batch = get_max_batch_num()
+        except IOError:
+            self.capture_batch = next_batch()
             self.capture_data = []
             self.curr_capture_sign_data = {
                 'acc': [],
@@ -87,20 +89,22 @@ class CaptureStore:
         self.curr_capture_sign_data['gyr'].append(gyr_data)
         self.curr_capture_sign_data['emg'].append(emg_data)
 
-    def create_new_store_instance(self):
-        self.capture_batch = get_max_batch_num()
-        self.next_sign()
-
     def get_curr_capture_times(self):
         return len(self.curr_capture_sign_data['acc'])
 
     def is_capture_times_satisfy(self):
-        return len(self.curr_capture_sign_data['acc']) > 22
+        return len(self.curr_capture_sign_data['acc']) >= 22
 
     def is_empty(self):
         return self.get_curr_capture_times() == 0
 
     def next_sign(self):
+        # 当前batch每种手语采集完毕
+        if self.curr_capture_sign_data >= SIGN_COUNT:
+            self.save_to_file()
+            self.capture_batch = next_batch()
+            self.capture_data = []
+
         self.curr_capture_sign_data = {
             'acc': [],
             'gyr': [],
@@ -109,11 +113,27 @@ class CaptureStore:
         self.capture_data.append(self.curr_capture_sign_data)
         self.curr_capture_sign_num = len(self.capture_data)
 
-
     def save_to_file(self):
         # todo 以文件夹形式保存 同时要将list的格式展开
-        os.remove('tmp_collection.data')
-        pass
+        os.makedirs(DATA_PATH + '\\' + str(self.capture_batch))
+        curr_data_path = os.path.join(DATA_PATH, str(self.capture_batch))
+        DIR_NAME_LIST = ['Acceleration', 'Emg', 'Gyroscope']
+        for i in range(len(TYPE_LIST)):
+            dir_name = DIR_NAME_LIST[i]
+            data_type = TYPE_LIST[i]
+            data_load_path = os.path.join(curr_data_path, dir_name)
+            os.makedirs(data_load_path)
+            for cap_num in range(len(self.capture_data)):
+                file_path = os.path.join(data_load_path, str(cap_num + 1) + '.txt')
+                file_ = open(file_path, 'w')
+                cap_data = self.capture_data[cap_num][data_type]
+                data_lines_str = ''
+                for data_block in cap_data:
+                    for each_line in data_block:
+                        data_lines_str += str(each_line) + '\n'
+                file_.write(data_lines_str)
+                file_.close()
+        os.remove('.\\tmp_collection.data')
 
     def save_tmp_obj(self):
         file_ = open('tmp_collection.data', 'w+b')
@@ -150,13 +170,11 @@ class CaptureControl(object):
 
     def start(self):
         startTime = time.time()
-        printTime = time.time()
         while self.capture_state != STATE_STOP_COLLECTION:
             # 一个手势若干遍采集的开始
-
             wait_time_start = time.time()
             # 等待用户1.5s
-            while (time.time() - wait_time_start) < 2:
+            while (time.time() - wait_time_start) < 1.5:
                 # 当用户存储,丢弃,暂停采集时退出等待
                 if self.capture_state != STATE_STANDBY:
                     break
@@ -188,15 +206,12 @@ class CaptureControl(object):
                     if (currentTime - startTime) > self._t_s:
                         startTime = time.time()
                         self.store_data()
-                    if currentTime - printTime > 0.5 and self.capture_state == STATE_CAPTURING:
-                        printTime = time.time()
-                        print(' . ')
         if not self.capture_store.is_empty():
             self.capture_store.save_tmp_obj()
 
     # 每次采集的长度是通过采集次数限制的
     def cap_data(self):
-        next_tag_num = self.capture_store.get_curr_capture_times() + 1
+        next_tag_num = self.capture_store.get_curr_capture_times()
         self.Emg.append(self._myo_device.emg + (next_tag_num,))
         self.Acc.append([it for it in self._myo_device.acceleration])
         self.Gyr.append([it for it in self._myo_device.gyroscope])
@@ -209,6 +224,7 @@ class CaptureControl(object):
             self._myo_device.vibrate(VibrationType.short)
             if self.capture_store.is_capture_times_satisfy():
                 self.capture_store.next_sign()
+                self.update_capture_state_info()
         #     进行下一个手语采集
         else:
             self.cap_data()
@@ -220,22 +236,26 @@ class CaptureControl(object):
 
     def start_capture(self):
         self.capture_state = STATE_START_CAPTURE
-        self.update_capture_state_info()
 
     def auto_continue_capture(self):
-        self.capture_store.append_data(self.Acc, self.Gyr, self.Emg)
+        self.store_single_capture_data()
         self.is_cap_store = True
         if self.is_auto_capture:
             self.start_capture()
         self.update_capture_state_info()
 
-    def continue_capture(self):
-        if not self.is_cap_store:
-            self.capture_store.append_data(self.Acc, self.Gyr, self.Emg)
+    def store_single_capture_data(self):
+        self.capture_store.append_data(self.Acc, self.Gyr, self.Emg)
+        self.update_capture_state_info()
 
+    def continue_capture(self):
+        if not self.is_cap_store and len(self.Acc) == 180:
+            self.store_single_capture_data()
         self.is_cap_store = True
+
         if not self.is_auto_capture:
             self.start_capture()
+
         self.update_capture_state_info()
 
     def discard_capture(self):
@@ -252,8 +272,15 @@ class CaptureControl(object):
         self.capture_state = STATE_STOP_COLLECTION
         self.update_capture_state_info()
         self.view.distroy_window()
+        if self.capture_store.curr_capture_sign_num == 1 \
+                and self.capture_store.get_curr_capture_times() == 0:
+            num = get_max_batch_num() - 1
+            file_ = open('batch_num', 'w')
+            file_.write(str(num))
+            file_.close()
+
+        # todo debug ,remove
         data = self.capture_store.curr_capture_sign_data
-        # todo debug remove
         file_ = open('data_aaa', 'w+b')
         pickle.dump(data, file_)
         file_.close()
@@ -274,18 +301,15 @@ class CaptureControl(object):
             res += '当前采集数据被保存'
         self.view.update_info(res)
 
+
 class ControlPanel:
     def __init__(self, wrap_window):
         self.info_frame = Tkinter.Frame(wrap_window)
         self.info_frame.pack()
-
         self.info_display = Tkinter.Text(self.info_frame)
         self.info_display.pack()
-
         self.text = ''
-
         self.wrap_window = wrap_window
-
         self.button_frame = Tkinter.Frame(wrap_window)
         self.button_frame.pack(side=TOP)
 
@@ -298,21 +322,20 @@ class ControlPanel:
                                              text='自动采集',
                                              command=capture_control.auto_capture)
         button_auto_capture.pack(side=LEFT)
-
         button_pause_capture = Tkinter.Button(self.button_frame,
                                               text='暂停采集',
                                               command=capture_control.pause_capture)
         button_pause_capture.pack(side=LEFT)
-
-        button_discard_capture = Tkinter.Button(self.button_frame, text='丢弃此次采集',
+        button_discard_capture = Tkinter.Button(self.button_frame,
+                                                text='丢弃此次采集',
                                                 command=capture_control.discard_capture)
         button_discard_capture.pack(side=LEFT)
-
-        button_save_capture = Tkinter.Button(self.button_frame, text='保存此次采集',
+        button_save_capture = Tkinter.Button(self.button_frame,
+                                             text='保存此次采集',
                                              command=capture_control.continue_capture)
         button_save_capture.pack(side=LEFT)
-
-        button = Tkinter.Button(self.button_frame, text="退出",
+        button = Tkinter.Button(self.button_frame,
+                                text="退出",
                                 command=capture_control.stop_capture)
         button.pack(side=LEFT)
 
@@ -326,6 +349,16 @@ class ControlPanel:
 
     def distroy_window(self):
         self.wrap_window.destroy()
+
+class CaptureThread(threading.Thread):
+    def __init__(self, capture_control):
+        threading.Thread.__init__(self)
+        self.capture_control = capture_control
+
+    def run(self):
+        self.capture_control.start()
+        return
+
 
 def get_max_batch_num():
     file = open('batch_num', 'r')
@@ -354,7 +387,6 @@ def main():
     try:
         myo_device = myo_device[0]
         myo_device.set_stream_emg(myo.StreamEmg.enabled)
-
         wrap_window = Tkinter.Tk()
         wrap_window.title('collect')
         wrap_window.geometry('480x370')
@@ -362,10 +394,11 @@ def main():
         capture_control = CaptureControl(myo_device, panel)
         panel.set_control(capture_control)
 
-        threading.Thread(target=capture_control.start).start()
-        wrap_window.mainloop()
+        t = CaptureThread(capture_control)
+        t.start()
 
-    except IndexError:
+        wrap_window.mainloop()
+    except RuntimeError:
         print('device didn\'t connected')
 
 if __name__ == '__main__':

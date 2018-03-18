@@ -105,7 +105,7 @@ def trans_data_to_time_seqs(data_set):
 
 def print_plot(data_set, data_cap_type, data_feat_type):
     for dimension in range(TYPE_LEN[data_cap_type]):
-        fig_acc = plt.figure(figsize=(700, 400))
+        fig_acc = plt.figure()
         fig_acc.add_subplot(111, title='%s %s dim%s' % (data_feat_type, data_cap_type, str(dimension + 1)))
         capture_times = len(data_set[data_feat_type])
         capture_times = capture_times if capture_times < 11 else 11
@@ -341,14 +341,14 @@ def load_from_file_feed_back():
 
 
 def main():
-    sign_id = 4
+    sign_id = 1
     # 从采集文件获取数据
-    # data_set = Load_ALL_Data(sign_id=sign_id, batch_num=10)
+    data_set = Load_ALL_Data(sign_id=sign_id, batch_num=10)
     # 从feedback文件获取数据
-    data_set = load_from_file_feed_back()[sign_id]
+    # data_set = load_from_file_feed_back()[sign_id]
 
     # 数据采集类型 emg acc gyr
-    data_cap_type = 'gyr'
+    data_cap_type = 'acc'
 
     # 数据特征类型 zc rms arc
     data_feat_type = 'raw'
