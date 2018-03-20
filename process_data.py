@@ -25,7 +25,7 @@ TYPE_LEN = {
     'emg': 8
 }
 
-# CAP_TYPE_LIST = ['acc', 'gyr']
+# CAP_TYPE_LIST = ['acc', 'gyr']  直接在这里修改可去除emg
 CAP_TYPE_LIST = ['acc', 'gyr', 'emg']
 GESTURES_TABLE = ['肉 ', '鸡蛋 ', '喜欢 ', '您好 ', '你 ', '什么 ', '想 ', '我 ', '很 ', '吃 ',
                   '老师 ', '发烧 ', '谢谢 ', '']
@@ -319,6 +319,7 @@ def append_single_data_feature(acc_data, gyr_data, emg_data, scale):
         # 针对每个识别window
         # 把这一次采集的三种数据采集类型进行拼接
         line = np.append(acc_data[each_window], gyr_data[each_window])
+        # todo 此处去除了emg
         # line = np.append(line, emg_data[each_window])
         update_scale(line=line, scale=scale)
         if is_first:
