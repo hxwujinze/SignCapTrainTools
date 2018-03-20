@@ -1,3 +1,4 @@
+# coding:utf-8
 import os
 import pickle
 import random
@@ -38,7 +39,7 @@ try:
     rawData = rawData[1].extend(rawData[2])
 except IndexError:
     rawData = rawData[1]
-# train_data => (batch_amount, data_set)
+# train_data => (batch_amount, data_set_emg)
 
 random.shuffle(rawData)
 
@@ -75,7 +76,7 @@ trainingSet = Data.TensorDataset(data_tensor=trainingInput,
                                  target_tensor=trainingLabel)
 loader = Data.DataLoader(
     dataset=trainingSet,
-    batch_size=8,  # should be tuned when data become bigger
+    batch_size=64,  # should be tuned when data become bigger
     shuffle=True
 )
 
@@ -83,31 +84,36 @@ class LSTM(nn.Module):
     def __init__(self):
         super(LSTM, self).__init__()
         self.lstm = nn.LSTM(
-            input_size=84,  # feature's number
+            input_size=36,  # feature's number
             # 2*(3+3+3*4) +(8 + 8 +4*8)
-
             hidden_size=20,  # hidden size of rnn layers
-            num_layers=2,  # the number of rnn layers
-
+            num_layers=3,  # the number of rnn layers
+            # hidden_size=20,  # hidden size of rnn layers
+            # num_layers=2,  # the number of rnn layers
             batch_first=True,
-            dropout=0.5)
+            dropout=0.40)
         # dropout :
         # 在训练时，每次随机（如 50% 概率）忽略隐层的某些节点；
         # 这样，我们相当于随机从 2^H 个模型中采样选择模型；同时，由于每个网络只见过一个训练数据
-
-        self.out = nn.Linear(20, 12)
+        # 使得模型保存一定的随机性 避免过拟合严重
+        self.out = nn.Linear(20, 16)
+        # todo 去了softmax 加个 autoencoder
+        self.out2 = nn.Linear(16, 14)
         # use soft max classifier.
         # 在输出层中间加了层softmax 用于分类
         # softmax将会输出这十四个结果每个可能是正确的概率
-        self.out2 = nn.Linear(12, 14)
+        # self.out = nn.Linear(20, 12)
+        # self.out2 = nn.Linear(12, 14)
 
     def forward(self, x):
         lstm_out, (h_n, h_c) = self.lstm(x, None)
         out = F.relu(lstm_out)
         out = self.out(lstm_out[:, -1, :])
         out = F.relu(out)
+        # return out
+
         out2 = self.out2(out)
-        out2 = F.softmax(out2)
+        out2 = F.softmax(out2, dim=1)
         return out2
 
 # define loss function and optimizer
@@ -120,7 +126,7 @@ model.train()
 # 转换为训练模式
 
 loss_func = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
 # learning rate can be tuned for better performance
 
 start_time_raw = time.time()
@@ -137,32 +143,26 @@ print('start_at: %s' % start_time)
 
 # start training
 # epoch : 用所有训练数据跑一遍称为一次epoch
-for epoch in range(0, 501):
-
-    # for each_batch in batch_list:
-    #     batch_x = each_batch[0]
-    #     batch_y = each_batch[1]
+for epoch in range(0, 781):
 
     for batch_x, batch_y in loader:
-
-        batch_x = Variable(batch_x)
-        batch_y = Variable(batch_y)
+        batch_x = Variable(batch_x)  # .cuda()
+        batch_y = Variable(batch_y)  # .cuda()
 
         batch_out = model(batch_x)
         batch_out = torch.squeeze(batch_out)
         loss = loss_func(batch_out, batch_y)
         optimizer.zero_grad()
-        #  print(loss)
         loss.backward()
         optimizer.step()
     if epoch % 20 == 0:
+        print(loss)
         model.eval()
         # 转换为求值模式
-
-        testInput_ = Variable(testInput)  # .cuda()  # 转换在gpu内跑识别
+        testInput_ = Variable(testInput)  #.cuda()  # 转换在gpu内跑识别
         # 转换为可读取的输入 Variable
         # 如下进行nn的正向使用 分类
-        testOuput_ = model(testInput_)  # .cpu()     # 从gpu中取回cpu算准确度
+        testOuput_ = model(testInput_)  #.cpu()     # 从gpu中取回cpu算准确度
         # 需要从gpu的显存中取回内存进行计算正误率
         testOuput_ = getMaxIndex(testOuput_)
         # softmax是14个概率的输出
@@ -188,9 +188,9 @@ cost_time = time.strftime('%H:%M:%S', time.gmtime(cost_time, ))
 print('cost time: %s' % cost_time)
 
 end_time = time.strftime('%m-%d,%H-%M', time.localtime(end_time_raw))
-torch.save(model.state_dict(), 'model_param%s.pkl' % end_time)
+torch.save(model.state_dict(), DATA_DIR_PATH + 'model_param%s.pkl' % end_time)
 
-file = open('models_info_%s' % end_time, 'w')
+file = open(DATA_DIR_PATH + 'models_info_%s' % end_time, 'w')
 file.writelines('batch_size:%d\nacc_result:%d' % (BATCH_SIZE, result))
 file.close()
 # how to read? :

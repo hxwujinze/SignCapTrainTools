@@ -2,8 +2,10 @@
 import os
 import pickle
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib import font_manager
 from matplotlib.legend_handler import HandlerLine2D
 
 Width_EMG = 9
@@ -14,12 +16,19 @@ WINDOW_SIZE = 16
 SIGN_COUNT = 14
 DATA_DIR_PATH = os.getcwd() + '\\data'
 
+myfont = font_manager.FontProperties(fname='C:/Windows/Fonts/msyh.ttc')
+mpl.rcParams['axes.unicode_minus'] = False
+
 TYPE_LEN = {
     'acc': 3,
     'gyr': 3,
     'emg': 8
 }
-CAP_TYPE_LIST = ['acc', 'emg', 'gyr']
+
+# CAP_TYPE_LIST = ['acc', 'gyr']
+CAP_TYPE_LIST = ['acc', 'gyr', 'emg']
+GESTURES_TABLE = ['肉 ', '鸡蛋 ', '喜欢 ', '您好 ', '你 ', '什么 ', '想 ', '我 ', '很 ', '吃 ',
+                  '老师 ', '发烧 ', '谢谢 ', '']
 
 def file2matrix(filename, data_col_num):
     del_sign = '()[]'
@@ -46,6 +55,9 @@ def file2matrix(filename, data_col_num):
     'gyr': [ 同上 ] 
     'emg': [ 形式同上 但是有8个维度]
 }
+
+py2 py3 pickle 不能通用
+
 '''
 
 def Load_ALL_Data(sign_id, batch_num):
@@ -103,7 +115,7 @@ def Length_Adjust(A):
 def trans_data_to_time_seqs(data_set):
     return data_set.T
 
-def print_plot(data_set, data_cap_type, data_feat_type):
+def print_plot(sign_id, data_set, data_cap_type, data_feat_type):
     for dimension in range(TYPE_LEN[data_cap_type]):
         fig_acc = plt.figure()
         fig_acc.add_subplot(111, title='%s %s dim%s' % (data_feat_type, data_cap_type, str(dimension + 1)))
@@ -114,7 +126,7 @@ def print_plot(data_set, data_cap_type, data_feat_type):
         for capture_num in range(0, capture_times):
             single_capture_data = trans_data_to_time_seqs(data_set[data_feat_type][capture_num])
             data = single_capture_data[dimension]
-            l = plt.plot(range(len(data)), data, '.-', label='cap %d' % capture_num)
+            l = plt.plot(range(len(data)), data, '.-', label='cap %d' % capture_num, )
             handle_lines_map[l[0]] = HandlerLine2D(numpoints=1)
         plt.legend(handler_map=handle_lines_map)
 
@@ -129,15 +141,21 @@ def pickle_to_file(batch_num, feedback_data=None):
     :param feedback_data 是否将之前feedback数据纳入训练集
     :return: None  过程函数
     """
-    file = open(DATA_DIR_PATH + '\\scale_rnn', 'r+b')
-    scale = pickle.load(file)
-    file.close()
+    try:
+        file = open(DATA_DIR_PATH + '\\scale_rnn', 'r+b')
+        scale = pickle.load(file)
+        file.close()
+    except IOError:
+        scale = [-999 for i in range(36)]
 
-    file = open(DATA_DIR_PATH + '\\data_set', 'r+b')
-    train_data = pickle.load(file)
-    file.close()
+    try:
+        file = open(DATA_DIR_PATH + '\\data_set', 'r+b')
+        train_data = pickle.load(file)
+        file.close()
+    except IOError:
+        train_data = (0, [])
 
-    # (batch_amount, data_set)
+    # (batch_amount, data_set_emg)
     # 元组的形式保存数据数据对象
     # [0] 是当前数据对象所包含的batch数
     # [1] 是数据对象的实例
@@ -179,7 +197,7 @@ def pickle_to_file(batch_num, feedback_data=None):
     else:
         train_data = (curr_data_set_cont, train_data)
 
-    # (batch_amount, data_set)
+    # (batch_amount, data_set_emg)
     file = open(DATA_DIR_PATH + '\\data_set', 'w+b')
     pickle.dump(train_data, file)
     file.close()
@@ -227,8 +245,10 @@ def feature_extract(data_set, type_name):
     }
 
 def feature_extract_single(data, type_name):
+    data = Length_Adjust(data)
     window_amount = len(data) / WINDOW_SIZE
-    windows_data = np.vsplit(data, window_amount)
+    # windows_data = data.reshape(window_amount, WINDOW_SIZE, TYPE_LEN[type_name])
+    windows_data = np.vsplit(data[0:160], window_amount)
     win_index = 0
     is_first = True
     seg_all_feat = []
@@ -299,7 +319,7 @@ def append_single_data_feature(acc_data, gyr_data, emg_data, scale):
         # 针对每个识别window
         # 把这一次采集的三种数据采集类型进行拼接
         line = np.append(acc_data[each_window], gyr_data[each_window])
-        line = np.append(line, emg_data[each_window])
+        # line = np.append(line, emg_data[each_window])
         update_scale(line=line, scale=scale)
         if is_first:
             is_first = False
@@ -321,43 +341,33 @@ def load_from_file_feed_back():
     并转换为符合绘图and训练数据的形式
     :return:[  [ dict(三种采集类型数据)该种手语的每次采集数据 ,... ] 每种手语 ,...]
     """
-    file_name = ''
-    for root, dirs, files in os.walk(DATA_DIR_PATH):
-        for file_name in files:
-            if file_name.startswith('feedback_data'):
-                file_name = DATA_DIR_PATH + '\\' + file_name
-                file = open(file_name, 'r+b')
-                # file = open('data_aaa', 'r+b')
-                feedback_data_set = pickle.load(file)
-                # [ (sign_id, data), .....  ]
-                file.close()
-                data_set = list(range(SIGN_COUNT))
-                for each_cap in feedback_data_set:
-                    data_set[each_cap[0]] = each_cap[1]
-                return data_set
-    if file_name == '':
-        print('feedback_data not find ')
-
-
+    file_name = \
+        r'C:\Users\Scarecrow\PycharmProjects\SignProjectServerPy2\utilities_access\models_data\feedback_data_'
+    file_ = open(file_name, 'r+b')
+    # file = open('data_aaa', 'r+b')
+    feedback_data_set = pickle.load(file_)
+    # [ (sign_id, data), .....  ]
+    file_.close()
+    data_set = list(range(SIGN_COUNT))
+    for each_cap in feedback_data_set:
+        data_set[each_cap[0]] = each_cap[1]
+    return data_set
 
 def main():
-    sign_id = 1
+    sign_id = 5
     # 从采集文件获取数据
-    data_set = Load_ALL_Data(sign_id=sign_id, batch_num=10)
+    # data_set = Load_ALL_Data(sign_id=sign_id, batch_num=10)
     # 从feedback文件获取数据
-    # data_set = load_from_file_feed_back()[sign_id]
+    data_set = load_from_file_feed_back()[sign_id]
 
     # 数据采集类型 emg acc gyr
     data_cap_type = 'acc'
 
     # 数据特征类型 zc rms arc
-    data_feat_type = 'raw'
-
-    # for i in range(len(data_set[data_cap_type] )):
-    #     data_set[data_cap_type][i] = np.array(data_set[data_cap_type][i])
+    data_feat_type = 'rms'
 
     data_set = feature_extract(data_set, data_cap_type)
-    print_plot(data_set, data_cap_type, data_feat_type)
+    print_plot(sign_id, data_set, data_cap_type, data_feat_type)
 
     # 将采集数据转换为训练数据
     # pickle_to_file(batch_num=9)

@@ -11,7 +11,9 @@ from myo import VibrationType
 
 DATA_PATH = os.getcwd() + '\\data'
 TYPE_LIST = ['acc', 'emg', 'gyr']
-SIGN_COUNT = 1
+GESTURES_TABLE = ['肉 ', '鸡蛋 ', '喜欢 ', '您好 ', '你 ', '什么 ', '想 ', '我 ', '很 ', '吃 ',
+                  '老师 ', '发烧 ', '谢谢 ', '']
+SIGN_COUNT = 14
 
 STATE_END_OF_CAPTURE = -1
 # 一个手势的一次采集结束
@@ -100,7 +102,7 @@ class CaptureStore:
 
     def next_sign(self):
         # 当前batch每种手语采集完毕
-        if self.curr_capture_sign_data >= SIGN_COUNT:
+        if self.curr_capture_sign_num >= SIGN_COUNT:
             self.save_to_file()
             self.capture_batch = next_batch()
             self.capture_data = []
@@ -133,7 +135,11 @@ class CaptureStore:
                         data_lines_str += str(each_line) + '\n'
                 file_.write(data_lines_str)
                 file_.close()
-        os.remove('.\\tmp_collection.data')
+        try:
+            os.remove('.\\tmp_collection.data')
+        except WindowsError:
+            print('tmp file doesn\'t created no need to delete')
+
 
     def save_tmp_obj(self):
         file_ = open('tmp_collection.data', 'w+b')
@@ -143,8 +149,11 @@ class CaptureStore:
         file_.close()
 
     def get_store_status(self):
-        res = '当前batch号: %d\n当前手语id: %d\n当前采集次数: %d' % \
-              (self.capture_batch, self.curr_capture_sign_num, self.get_curr_capture_times())
+        res = '当前batch号: %d\n当前手语id: %d %s\n当前采集次数: %d' % \
+              (self.capture_batch,
+               self.curr_capture_sign_num,
+               GESTURES_TABLE[self.curr_capture_sign_num - 1],
+               self.get_curr_capture_times())
         return res
 
 class CaptureControl(object):
@@ -169,7 +178,7 @@ class CaptureControl(object):
 
 
     def start(self):
-        startTime = time.time()
+
         while self.capture_state != STATE_STOP_COLLECTION:
             # 一个手势若干遍采集的开始
             wait_time_start = time.time()
@@ -190,21 +199,21 @@ class CaptureControl(object):
                 # 手势每次的采集
                 self.capture_state = STATE_CAPTURING
                 self.update_capture_state_info()
-
                 self.Acc = []
                 self.Gyr = []
                 self.Emg = []
-
                 self.is_cap_discard = False
                 self.is_cap_store = False
 
                 self._myo_device.vibrate(VibrationType.short)
                 time.sleep(0.2)
+                start_time = time.clock()
                 while self.capture_state == STATE_CAPTURING:
-                    currentTime = time.time()
+                    current_time = time.clock()
                     # 以固定频率进行采集
-                    if (currentTime - startTime) > self._t_s:
-                        startTime = time.time()
+                    gap_time = current_time - start_time
+                    if gap_time > self._t_s:
+                        start_time = time.clock()
                         self.store_data()
         if not self.capture_store.is_empty():
             self.capture_store.save_tmp_obj()
