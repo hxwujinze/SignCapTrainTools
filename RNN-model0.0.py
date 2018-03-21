@@ -11,6 +11,11 @@ import torch.nn.functional as F
 import torch.utils.data as Data
 from torch.autograd import Variable
 
+# todo 采用 emg+acc+gry单nn全部处理
+# 和 emg，acc+gyr双nn分别处理
+
+
+
 # 由于softmax输出的是十四个概率值 于是取最大的那个就是最可能正确的答案
 # 取最大值 并且转换为int
 def getMaxIndex(tensor):

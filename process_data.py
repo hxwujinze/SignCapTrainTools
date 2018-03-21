@@ -5,6 +5,7 @@ import pickle
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+import pywt
 from matplotlib import font_manager
 from matplotlib.legend_handler import HandlerLine2D
 
@@ -13,6 +14,7 @@ Width_ACC = 3
 Width_GYR = 3
 LENGTH = 160
 WINDOW_SIZE = 16
+EMG_WINDOW_SIZE = 5
 SIGN_COUNT = 14
 DATA_DIR_PATH = os.getcwd() + '\\data'
 
@@ -115,15 +117,15 @@ def Length_Adjust(A):
 def trans_data_to_time_seqs(data_set):
     return data_set.T
 
-def print_plot(sign_id, data_set, data_cap_type, data_feat_type):
+def print_plot(data_set, data_cap_type, data_feat_type):
     for dimension in range(TYPE_LEN[data_cap_type]):
-        fig_acc = plt.figure()
-        fig_acc.add_subplot(111, title='%s %s dim%s' % (data_feat_type, data_cap_type, str(dimension + 1)))
+        fig_ = plt.figure()
+        fig_.add_subplot(111, title='%s %s dim%s' % (data_feat_type, data_cap_type, str(dimension + 1)))
         capture_times = len(data_set[data_feat_type])
         capture_times = capture_times if capture_times < 11 else 11
         # 最多只绘制十次采集的数据 （太多了会看不清）
         handle_lines_map = {}
-        for capture_num in range(0, capture_times):
+        for capture_num in range(0, 18):
             single_capture_data = trans_data_to_time_seqs(data_set[data_feat_type][capture_num])
             data = single_capture_data[dimension]
             l = plt.plot(range(len(data)), data, '.-', label='cap %d' % capture_num, )
@@ -206,6 +208,80 @@ def pickle_to_file(batch_num, feedback_data=None):
     pickle.dump(scale, file)
     file.close()
 
+def emg_feature_extract(data_set):
+    """
+    特征提取
+    :param data_set: 来自Load_From_File过程的返回值 一个dict
+                     包含一个手语 三种采集数据类型的 多次采集过程的数据
+    :param type_name: 数据采集的类型 决定nparray的长度
+    :return: 一个dict 包含这个数据采集类型的原始数据,3种特征提取后的数据,特征拼接后的特征向量
+            仍保持多次采集的数据放在一起
+    """
+    type_name = 'emg'
+    data_set_rms_feat = []
+    data_set_var_feat = []
+    data_set_append_feat = []
+    data_set = data_set[type_name]
+    for data in data_set:
+        seg_RMS_feat, seg_VAR_feat, seg_all_feat \
+            = emg_feature_extract_single(data)
+        data_set_var_feat.append(seg_VAR_feat)
+        data_set_rms_feat.append(seg_RMS_feat)
+        data_set_append_feat.append(seg_all_feat)
+    return {
+        'type_name': type_name,
+        'raw': data_set,
+        'rms': data_set_rms_feat,
+        'var': data_set_var_feat,  # window方差
+        'append_all': data_set_append_feat
+    }
+
+def emg_feature_extract_single(data):
+    data = Length_Adjust(data)
+    window_amount = len(data) / EMG_WINDOW_SIZE
+    # windows_data = data.reshape(window_amount, WINDOW_SIZE, TYPE_LEN[type_name])
+    data_len = (len(data) - 1) if len(data) % 2 == 1 else len(data)
+    windows_data = np.vsplit(data[0:data_len], window_amount)
+    win_index = 0
+    is_first = True
+    seg_all_feat = []
+    seg_RMS_feat = []
+    seg_VAR_feat = []
+
+    for Win_Data in windows_data:
+        # 依次处理每个window的数据
+        win_RMS_feat = np.sqrt(np.mean(np.square(Win_Data), axis=0))
+
+        win_avg_value = np.sum(Win_Data, axis=0) / EMG_WINDOW_SIZE
+        win_avg = np.array([win_avg_value for j in range(EMG_WINDOW_SIZE)])
+
+        diff = Win_Data - win_avg
+        square = np.square(diff)
+
+        win_VAR_feat = np.mean(square, axis=0)
+        # 将每个window特征提取的数据用vstack叠起来
+        if win_index == 0:
+            seg_RMS_feat = win_RMS_feat
+            seg_VAR_feat = win_VAR_feat
+        else:
+            seg_RMS_feat = np.vstack((seg_RMS_feat, win_RMS_feat))
+            seg_VAR_feat = np.vstack((seg_VAR_feat, win_VAR_feat))
+        win_index += 1
+
+        # 将三种特征拼接成一个长向量
+        # 层叠 转置 遍历展开
+        Seg_Feat = np.vstack((win_RMS_feat, win_VAR_feat))
+        All_Seg_Feat = Seg_Feat.T.ravel()
+
+        if is_first:
+            is_first = False
+            seg_all_feat = All_Seg_Feat
+        else:
+            seg_all_feat = np.vstack((seg_all_feat, All_Seg_Feat))
+
+    return seg_RMS_feat, seg_VAR_feat, seg_all_feat
+
+
 
 
 '''
@@ -286,10 +362,10 @@ def feature_extract_single(data, type_name):
 
     return seg_ARC_feat, seg_RMS_feat, seg_ZC_feat, seg_all_feat
 
-
 def ARC(Win_Data):
     Len_Data = len(Win_Data)
-    AR_coefficient = np.polyfit(range(Len_Data), Win_Data, 3)
+    AR_coefficient = []
+    # AR_coefficient = np.polyfit(range(Len_Data), Win_Data, 3)
     return AR_coefficient
 
 def append_feature_vector(data_set, scale):
@@ -354,21 +430,61 @@ def load_from_file_feed_back():
         data_set[each_cap[0]] = each_cap[1]
     return data_set
 
+def wavelet_trans(data, wavelet_type, level):
+    ret_data = data
+    for each_level in range(level):
+        ret_data = pywt.dwt(ret_data, wavelet_type)
+        ret_data = ret_data[0]
+    return ret_data
+
+def show_wave_trans(data_set):
+    wave_list = pywt.wavelist()
+    print('wave_list ' + str(wave_list))
+    res_list = []
+    data = data_set['raw']
+    for each_cap in data:
+        cap = np.array(each_cap).T
+        cap = pywt.threshold(cap, 30, mode='hard')
+        cap = wavelet_trans(cap, 'db7', 3)
+        cap = pywt.threshold(cap, 30, mode='hard')
+        res_list.append(cap)
+
+    # raw trans result
+    # for i in range(8): # for each channle
+    #     fig = plt.figure()
+    #     fig.add_subplot(111, title='trans channel %d' % (i + 1))
+    #     for j in range(len(res_list)):
+    #         plt.plot(range(len(res_list[j][i])),res_list[j][i],'.-' )
+    #
+    # plt.show()
+
+    for i in range(len(res_list)):
+        res_list[i] = np.abs(res_list[i].T)
+
+    aa = {
+        'emg': res_list
+    }
+
+    data_ = emg_feature_extract(aa)
+    print_plot(data_, 'emg', 'rms')
+
 def main():
-    sign_id = 5
+    sign_id = 6
     # 从采集文件获取数据
-    # data_set = Load_ALL_Data(sign_id=sign_id, batch_num=10)
+    data_set = Load_ALL_Data(sign_id=sign_id, batch_num=3)
     # 从feedback文件获取数据
-    data_set = load_from_file_feed_back()[sign_id]
+    # data_set = load_from_file_feed_back()[sign_id]
 
     # 数据采集类型 emg acc gyr
-    data_cap_type = 'acc'
+    data_cap_type = 'emg'
 
     # 数据特征类型 zc rms arc
-    data_feat_type = 'rms'
+    data_feat_type = 'raw'
 
     data_set = feature_extract(data_set, data_cap_type)
-    print_plot(sign_id, data_set, data_cap_type, data_feat_type)
+    # print_plot(data_set, data_cap_type, data_feat_type)
+
+    show_wave_trans(data_set)
 
     # 将采集数据转换为训练数据
     # pickle_to_file(batch_num=9)
