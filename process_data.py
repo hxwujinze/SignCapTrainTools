@@ -1,4 +1,6 @@
 # coding:utf-8
+
+# py3
 import os
 import pickle
 
@@ -14,8 +16,9 @@ Width_ACC = 3
 Width_GYR = 3
 LENGTH = 160
 WINDOW_SIZE = 16
-EMG_WINDOW_SIZE = 5
+EMG_WINDOW_SIZE = 3
 SIGN_COUNT = 14
+FEATURE_LENGTH = 44
 DATA_DIR_PATH = os.getcwd() + '\\data'
 
 myfont = font_manager.FontProperties(fname='C:/Windows/Fonts/msyh.ttc')
@@ -27,8 +30,8 @@ TYPE_LEN = {
     'emg': 8
 }
 
-# CAP_TYPE_LIST = ['acc', 'gyr']  直接在这里修改可去除emg
-CAP_TYPE_LIST = ['acc', 'gyr', 'emg']
+CAP_TYPE_LIST = ['acc', 'gyr']  # 直接在这里修改可去除emg
+# CAP_TYPE_LIST = ['acc', 'gyr', 'emg']
 GESTURES_TABLE = ['肉 ', '鸡蛋 ', '喜欢 ', '您好 ', '你 ', '什么 ', '想 ', '我 ', '很 ', '吃 ',
                   '老师 ', '发烧 ', '谢谢 ', '']
 
@@ -148,8 +151,7 @@ def pickle_to_file(batch_num, feedback_data=None):
         scale = pickle.load(file)
         file.close()
     except IOError:
-        scale = [-999 for i in range(36)]
-
+        scale = [-999 for i in range(FEATURE_LENGTH)]
     try:
         file = open(DATA_DIR_PATH + '\\data_set', 'r+b')
         train_data = pickle.load(file)
@@ -173,11 +175,12 @@ def pickle_to_file(batch_num, feedback_data=None):
             # 根据数据采集种类 提取特征
             for each_cap_type in CAP_TYPE_LIST:
                 extracted_data_set.append(feature_extract(raw_data_set, each_cap_type)['append_all'])
+            extracted_data_set.append(emg_feature_extract(raw_data_set)['append_all'])
+
             # 拼接特征 使其满足RNN的输入要求
             batch_list = append_feature_vector(extracted_data_set, scale)
             for each_data_mat in batch_list:
                 train_data.append((each_sign, each_data_mat))
-
     curr_data_set_cont = batch_num
 
     if feedback_data is not None:
@@ -195,7 +198,6 @@ def pickle_to_file(batch_num, feedback_data=None):
                 train_data_from_feedback.append((sign_id, each_data_mat))
         # 将feedback的结果追加在后面
         train_data = (curr_data_set_cont, train_data, train_data_from_feedback)
-
     else:
         train_data = (curr_data_set_cont, train_data)
 
@@ -217,31 +219,22 @@ def emg_feature_extract(data_set):
     :return: 一个dict 包含这个数据采集类型的原始数据,3种特征提取后的数据,特征拼接后的特征向量
             仍保持多次采集的数据放在一起
     """
-    type_name = 'emg'
-    data_set_rms_feat = []
-    data_set_var_feat = []
-    data_set_append_feat = []
-    data_set = data_set[type_name]
-    for data in data_set:
-        seg_RMS_feat, seg_VAR_feat, seg_all_feat \
-            = emg_feature_extract_single(data)
-        data_set_var_feat.append(seg_VAR_feat)
-        data_set_rms_feat.append(seg_RMS_feat)
-        data_set_append_feat.append(seg_all_feat)
+    data_trans = emg_wave_trans(data_set['emg'])
     return {
-        'type_name': type_name,
-        'raw': data_set,
-        'rms': data_set_rms_feat,
-        'var': data_set_var_feat,  # window方差
-        'append_all': data_set_append_feat
+        'type_name': 'emg',
+        'raw': data_set['emg'],
+        'trans': data_trans,
+        'append_all': data_trans,
     }
+
 
 def emg_feature_extract_single(data):
     data = Length_Adjust(data)
     window_amount = len(data) / EMG_WINDOW_SIZE
     # windows_data = data.reshape(window_amount, WINDOW_SIZE, TYPE_LEN[type_name])
-    data_len = (len(data) - 1) if len(data) % 2 == 1 else len(data)
-    windows_data = np.vsplit(data[0:data_len], window_amount)
+    window_rest = len(data) % EMG_WINDOW_SIZE
+    data_len = (len(data) - window_rest) if window_rest != 0 else len(data)
+    windows_data = np.vsplit(data[0:data_len, :], window_amount)
     win_index = 0
     is_first = True
     seg_all_feat = []
@@ -364,8 +357,8 @@ def feature_extract_single(data, type_name):
 
 def ARC(Win_Data):
     Len_Data = len(Win_Data)
-    AR_coefficient = []
-    # AR_coefficient = np.polyfit(range(Len_Data), Win_Data, 3)
+    # AR_coefficient = []
+    AR_coefficient = np.polyfit(range(Len_Data), Win_Data, 3)
     return AR_coefficient
 
 def append_feature_vector(data_set, scale):
@@ -395,8 +388,7 @@ def append_single_data_feature(acc_data, gyr_data, emg_data, scale):
         # 针对每个识别window
         # 把这一次采集的三种数据采集类型进行拼接
         line = np.append(acc_data[each_window], gyr_data[each_window])
-        # todo 此处去除了emg
-        # line = np.append(line, emg_data[each_window])
+        line = np.append(line, emg_data[each_window])
         update_scale(line=line, scale=scale)
         if is_first:
             is_first = False
@@ -431,63 +423,45 @@ def load_from_file_feed_back():
     return data_set
 
 def wavelet_trans(data, wavelet_type, level):
-    ret_data = data
-    for each_level in range(level):
-        ret_data = pywt.dwt(ret_data, wavelet_type)
-        ret_data = ret_data[0]
-    return ret_data
+    data = np.array(data).T
+    data = pywt.threshold(data, 30, mode='hard')
+    data = pywt.wavedec(data, wavelet_type, level=level)
+    data = np.vstack((data[0].T, np.zeros(8))).T
+    # 再次阈值滤波
+    data = pywt.threshold(data, 15, mode='hard')
+    return data
 
-def show_wave_trans(data_set):
-    wave_list = pywt.wavelist()
-    print('wave_list ' + str(wave_list))
+def emg_wave_trans(data_set):
     res_list = []
-    data = data_set['raw']
-    for each_cap in data:
-        cap = np.array(each_cap).T
-        cap = pywt.threshold(cap, 30, mode='hard')
-        cap = wavelet_trans(cap, 'db7', 3)
-        cap = pywt.threshold(cap, 30, mode='hard')
+    for each_cap in data_set:
+        cap = wavelet_trans(each_cap, 'db3', 5)
         res_list.append(cap)
-
-    # raw trans result
-    # for i in range(8): # for each channle
-    #     fig = plt.figure()
-    #     fig.add_subplot(111, title='trans channel %d' % (i + 1))
-    #     for j in range(len(res_list)):
-    #         plt.plot(range(len(res_list[j][i])),res_list[j][i],'.-' )
-    #
-    # plt.show()
-
     for i in range(len(res_list)):
         res_list[i] = np.abs(res_list[i].T)
-
-    aa = {
-        'emg': res_list
-    }
-
-    data_ = emg_feature_extract(aa)
-    print_plot(data_, 'emg', 'rms')
+    return res_list
 
 def main():
-    sign_id = 6
+    sign_id = 8
     # 从采集文件获取数据
-    data_set = Load_ALL_Data(sign_id=sign_id, batch_num=3)
+    data_set = Load_ALL_Data(sign_id=sign_id, batch_num=12)
     # 从feedback文件获取数据
     # data_set = load_from_file_feed_back()[sign_id]
 
     # 数据采集类型 emg acc gyr
-    data_cap_type = 'emg'
+    data_cap_type = 'acc'
 
     # 数据特征类型 zc rms arc
     data_feat_type = 'raw'
 
-    data_set = feature_extract(data_set, data_cap_type)
-    # print_plot(data_set, data_cap_type, data_feat_type)
+    if data_cap_type != 'emg':
+        data_set = feature_extract(data_set, data_cap_type)
+    else:
+        data_set = emg_feature_extract(data_set)
 
-    show_wave_trans(data_set)
+    print_plot(data_set, data_cap_type, data_feat_type)
 
     # 将采集数据转换为训练数据
-    # pickle_to_file(batch_num=9)
+    pickle_to_file(batch_num=12)
 
 if __name__ == "__main__":
     main()

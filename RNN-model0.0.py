@@ -11,11 +11,6 @@ import torch.nn.functional as F
 import torch.utils.data as Data
 from torch.autograd import Variable
 
-# todo 采用 emg+acc+gry单nn全部处理
-# 和 emg，acc+gyr双nn分别处理
-
-
-
 # 由于softmax输出的是十四个概率值 于是取最大的那个就是最可能正确的答案
 # 取最大值 并且转换为int
 def getMaxIndex(tensor):
@@ -29,10 +24,12 @@ def scale_data_block(data_block):
         for each_feat_dim in range(len(SCALE)):
             each_line[each_feat_dim] /= SCALE[each_feat_dim]
 
-
+CUDA_AVAILABLE = torch.cuda.is_available()
+print('cuda_status: %s' % str(CUDA_AVAILABLE))
 
 DATA_DIR_PATH = os.getcwd() + '\\data'
-BATCH_SIZE = 8
+BATCH_SIZE = 64
+
 
 # load data
 f = open(DATA_DIR_PATH + '\\data_set', 'r+b')
@@ -52,9 +49,9 @@ f = open(DATA_DIR_PATH + '\\scale_rnn', 'r+b')
 SCALE = pickle.load(f)
 f.close()
 
-CUDA_AVAILABLE = torch.cuda.is_available()
-print('cuda_status: %s' % str(CUDA_AVAILABLE))
-
+f = open(DATA_DIR_PATH + '\\scale_rnn', 'w+b')
+pickle.dump(SCALE, f, protocol=2)
+f.close()
 
 # process data
 dataInput, dataLabel = [], []
@@ -81,7 +78,7 @@ trainingSet = Data.TensorDataset(data_tensor=trainingInput,
                                  target_tensor=trainingLabel)
 loader = Data.DataLoader(
     dataset=trainingSet,
-    batch_size=64,  # should be tuned when data become bigger
+    batch_size=BATCH_SIZE,  # should be tuned when data become bigger
     shuffle=True
 )
 
@@ -89,9 +86,9 @@ class LSTM(nn.Module):
     def __init__(self):
         super(LSTM, self).__init__()
         self.lstm = nn.LSTM(
-            input_size=36,  # feature's number
+            input_size=44,  # feature's number
             # 2*(3+3+3*4) +(8 + 8 +4*8)
-            hidden_size=20,  # hidden size of rnn layers
+            hidden_size=26,  # hidden size of rnn layers
             num_layers=3,  # the number of rnn layers
             # hidden_size=20,  # hidden size of rnn layers
             # num_layers=2,  # the number of rnn layers
@@ -101,8 +98,8 @@ class LSTM(nn.Module):
         # 在训练时，每次随机（如 50% 概率）忽略隐层的某些节点；
         # 这样，我们相当于随机从 2^H 个模型中采样选择模型；同时，由于每个网络只见过一个训练数据
         # 使得模型保存一定的随机性 避免过拟合严重
-        self.out = nn.Linear(20, 16)
-        # todo 去了softmax 加个 autoencoder
+        self.out = nn.Linear(26, 16)
+        # todo autoencoder
         self.out2 = nn.Linear(16, 14)
         # use soft max classifier.
         # 在输出层中间加了层softmax 用于分类
@@ -131,7 +128,7 @@ model.train()
 # 转换为训练模式
 
 loss_func = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.0005, weight_decay=0.0000002)
 # learning rate can be tuned for better performance
 
 start_time_raw = time.time()
@@ -147,8 +144,8 @@ print('start_at: %s' % start_time)
 
 
 # start training
-# epoch : 用所有训练数据跑一遍称为一次epoch
-for epoch in range(0, 781):
+# epoch: 用所有训练数据跑一遍称为一次epoch
+for epoch in range(0, 681):
 
     for batch_x, batch_y in loader:
         batch_x = Variable(batch_x)  # .cuda()
@@ -161,7 +158,6 @@ for epoch in range(0, 781):
         loss.backward()
         optimizer.step()
     if epoch % 20 == 0:
-        print(loss)
         model.eval()
         # 转换为求值模式
         testInput_ = Variable(testInput)  #.cuda()  # 转换在gpu内跑识别
@@ -182,7 +178,7 @@ for epoch in range(0, 781):
             else:
                 error += 1
         result = right / (right + error)
-        print("epoch : ", epoch, "result: ", result)
+        print("epoch: %s\naccuracy: %s\nloss: %s" % (epoch, result, loss.data.float()))
 
 end_time_raw = time.time()
 end_time = time.strftime('%H:%M:%S', time.localtime(end_time_raw))
@@ -193,10 +189,10 @@ cost_time = time.strftime('%H:%M:%S', time.gmtime(cost_time, ))
 print('cost time: %s' % cost_time)
 
 end_time = time.strftime('%m-%d,%H-%M', time.localtime(end_time_raw))
-torch.save(model.state_dict(), DATA_DIR_PATH + 'model_param%s.pkl' % end_time)
+torch.save(model.state_dict(), 'model_param%s.pkl' % end_time)
 
-file = open(DATA_DIR_PATH + 'models_info_%s' % end_time, 'w')
-file.writelines('batch_size:%d\nacc_result:%d' % (BATCH_SIZE, result))
+file = open('models_info_%s' % end_time, 'w')
+file.writelines('batch_size:%d\nacc_result:%f' % (BATCH_SIZE, result))
 file.close()
 # how to read? :
 # model.load_state_dict(torch.load('model_param.pkl'))

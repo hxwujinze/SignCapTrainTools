@@ -1,12 +1,12 @@
 # coding:utf-8
-import Tkinter
 import os
 import pickle
 import threading
 import time
-from Tkinter import TOP, LEFT, END
 
+import Tkinter
 import myo
+from Tkinter import TOP, LEFT, END
 from myo import VibrationType
 
 DATA_PATH = os.getcwd() + '\\data'
@@ -14,6 +14,7 @@ TYPE_LIST = ['acc', 'emg', 'gyr']
 GESTURES_TABLE = ['肉 ', '鸡蛋 ', '喜欢 ', '您好 ', '你 ', '什么 ', '想 ', '我 ', '很 ', '吃 ',
                   '老师 ', '发烧 ', '谢谢 ', '']
 SIGN_COUNT = 14
+CAPTURE_TIMES = 22
 
 STATE_END_OF_CAPTURE = -1
 # 一个手势的一次采集结束
@@ -78,6 +79,7 @@ class CaptureStore:
             self.capture_data.append(self.curr_capture_sign_data)
             self.curr_capture_sign_num = len(self.capture_data)
 
+
     def append_data(self, acc_data, gyr_data, emg_data):
         """
         采集数据的保存是以 [ [] [] [] ... each次数的采集 ] 形式
@@ -95,7 +97,7 @@ class CaptureStore:
         return len(self.curr_capture_sign_data['acc'])
 
     def is_capture_times_satisfy(self):
-        return len(self.curr_capture_sign_data['acc']) >= 22
+        return len(self.curr_capture_sign_data['acc']) >= CAPTURE_TIMES
 
     def is_empty(self):
         return self.get_curr_capture_times() == 0
@@ -115,8 +117,24 @@ class CaptureStore:
         self.capture_data.append(self.curr_capture_sign_data)
         self.curr_capture_sign_num = len(self.capture_data)
 
+    def discard_curr_sign(self):
+        self.curr_capture_sign_data = {
+            'acc': [],
+            'gyr': [],
+            'emg': [],
+        }
+        self.capture_data = self.capture_data[:-1]
+        self.curr_capture_sign_num = len(self.capture_data)
+        self.curr_capture_sign_data = self.capture_data[-1]
+
+    def discard_curr_capture(self):
+        if len(self.curr_capture_sign_data['acc']) != 0:
+            self.curr_capture_sign_data['acc'].pop()
+            self.curr_capture_sign_data['gyr'].pop()
+            self.curr_capture_sign_data['emg'].pop()
+
+
     def save_to_file(self):
-        # todo 以文件夹形式保存 同时要将list的格式展开
         os.makedirs(DATA_PATH + '\\' + str(self.capture_batch))
         curr_data_path = os.path.join(DATA_PATH, str(self.capture_batch))
         DIR_NAME_LIST = ['Acceleration', 'Emg', 'Gyroscope']
@@ -173,9 +191,8 @@ class CaptureControl(object):
         self.is_cap_discard = False
         self.is_cap_store = False
         self.is_auto_capture = False
+        self.is_last_cap = False
         self.update_capture_state_info()
-
-
 
     def start(self):
 
@@ -232,6 +249,7 @@ class CaptureControl(object):
             self.update_capture_state_info()
             self._myo_device.vibrate(VibrationType.short)
             if self.capture_store.is_capture_times_satisfy():
+                self.is_last_cap = True
                 self.capture_store.next_sign()
                 self.update_capture_state_info()
         #     进行下一个手语采集
@@ -247,7 +265,9 @@ class CaptureControl(object):
         self.capture_state = STATE_START_CAPTURE
 
     def auto_continue_capture(self):
-        self.store_single_capture_data()
+        if not self.is_last_cap:
+            self.store_single_capture_data()
+        self.is_last_cap = False
         self.is_cap_store = True
         if self.is_auto_capture:
             self.start_capture()
@@ -268,9 +288,16 @@ class CaptureControl(object):
         self.update_capture_state_info()
 
     def discard_capture(self):
-        self.is_cap_discard = True
-        if not self.is_auto_capture:
-            self.start_capture()
+        if self.capture_state == STATE_STANDBY:
+            self.is_cap_discard = True
+            if not self.is_auto_capture:
+                self.start_capture()
+        else:
+            self.capture_store.discard_curr_sign()
+        self.update_capture_state_info()
+
+    def discard_sign(self):
+        self.capture_store.discard_curr_sign()
         self.update_capture_state_info()
 
     def pause_capture(self):
@@ -281,7 +308,7 @@ class CaptureControl(object):
         self.capture_state = STATE_STOP_COLLECTION
         self.update_capture_state_info()
         self.view.distroy_window()
-        if self.capture_store.curr_capture_sign_num == 1 \
+        if self.capture_store.get_curr_capture_times() == 1 \
                 and self.capture_store.get_curr_capture_times() == 0:
             num = get_max_batch_num() - 1
             file_ = open('batch_num', 'w')
@@ -342,6 +369,10 @@ class ControlPanel:
         button_save_capture = Tkinter.Button(self.button_frame,
                                              text='保存此次采集',
                                              command=capture_control.continue_capture)
+        button_save_capture.pack(side=LEFT)
+        button_save_capture = Tkinter.Button(self.button_frame,
+                                             text='删除该手语的采集',
+                                             command=capture_control.discard_sign)
         button_save_capture.pack(side=LEFT)
         button = Tkinter.Button(self.button_frame,
                                 text="退出",
