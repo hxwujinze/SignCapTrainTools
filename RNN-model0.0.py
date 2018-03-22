@@ -86,9 +86,9 @@ class LSTM(nn.Module):
     def __init__(self):
         super(LSTM, self).__init__()
         self.lstm = nn.LSTM(
-            input_size=44,  # feature's number
+            input_size=25,  # feature's number
             # 2*(3+3+3*4) +(8 + 8 +4*8)
-            hidden_size=26,  # hidden size of rnn layers
+            hidden_size=25,  # hidden size of rnn layers
             num_layers=3,  # the number of rnn layers
             # hidden_size=20,  # hidden size of rnn layers
             # num_layers=2,  # the number of rnn layers
@@ -98,8 +98,7 @@ class LSTM(nn.Module):
         # 在训练时，每次随机（如 50% 概率）忽略隐层的某些节点；
         # 这样，我们相当于随机从 2^H 个模型中采样选择模型；同时，由于每个网络只见过一个训练数据
         # 使得模型保存一定的随机性 避免过拟合严重
-        self.out = nn.Linear(26, 16)
-        # todo autoencoder
+        self.out = nn.Linear(25, 16)
         self.out2 = nn.Linear(16, 14)
         # use soft max classifier.
         # 在输出层中间加了层softmax 用于分类
@@ -118,8 +117,38 @@ class LSTM(nn.Module):
         out2 = F.softmax(out2, dim=1)
         return out2
 
+class AutoEncoder(nn.Module):
+    def __init__(self):
+        super(AutoEncoder, self).__init__()
+        self.encode = nn.Sequential(
+            nn.Linear(44, 44),
+            nn.Tanh(),
+            nn.Linear(44, 30),
+            nn.Tanh(),
+            nn.Linear(30, 25),
+
+        )
+
+        self.decode = nn.Sequential(
+            nn.Linear(25, 30),
+            nn.Tanh(),
+            nn.Linear(30, 44),
+            nn.Tanh(),
+            nn.Linear(44, 44),
+        )
+
+    def forward(self, x):
+        encode = self.encode(x)
+        decode = self.decode(encode)
+        return encode, decode
+
+
 # define loss function and optimizer
 model = LSTM()
+
+encoder = AutoEncoder()
+encoder.load_state_dict(torch.load('autoencoder_model03-22,21-15.pkl'))
+encoder.eval()
 
 # model.cuda()
 # 转换为GPU对象
@@ -135,14 +164,6 @@ start_time_raw = time.time()
 start_time = time.strftime('%H:%M:%S', time.localtime(start_time_raw))
 print('start_at: %s' % start_time)
 
-# batch_list = []
-#  转换为GPU：
-#  Variable(batch_x).cuda  所有Variable全部转换为gpu运算的对象（放入显存）
-#  先提前都装入显存中
-# for batch_x, batch_y in loader:
-#     batch_list.append((Variable(batch_x).cuda(), Variable(batch_y).cuda()))
-
-
 # start training
 # epoch: 用所有训练数据跑一遍称为一次epoch
 for epoch in range(0, 681):
@@ -150,8 +171,17 @@ for epoch in range(0, 681):
     for batch_x, batch_y in loader:
         batch_x = Variable(batch_x)  # .cuda()
         batch_y = Variable(batch_y)  # .cuda()
+        new_batch_x = []
+        for each_block in batch_x:
+            input_block = []
+            for each_line in each_block:
+                encode, decode = encoder(each_line)
+                input_block.append(encode)
+            input_block = torch.stack(input_block)
+            new_batch_x.append(input_block)
+        new_batch_x = torch.stack(new_batch_x)
 
-        batch_out = model(batch_x)
+        batch_out = model(new_batch_x)
         batch_out = torch.squeeze(batch_out)
         loss = loss_func(batch_out, batch_y)
         optimizer.zero_grad()
@@ -161,9 +191,20 @@ for epoch in range(0, 681):
         model.eval()
         # 转换为求值模式
         testInput_ = Variable(testInput)  #.cuda()  # 转换在gpu内跑识别
+        new_batch_x = []
+        for each_block in testInput_:
+            input_block = []
+            is_first_line = True
+            for each_line in each_block:
+                encode, decode = encoder(each_line)
+                input_block.append(encode)
+            input_block = torch.stack(input_block)
+            new_batch_x.append(input_block)
+        new_batch_x = torch.stack(new_batch_x)
+
         # 转换为可读取的输入 Variable
         # 如下进行nn的正向使用 分类
-        testOuput_ = model(testInput_)  #.cpu()     # 从gpu中取回cpu算准确度
+        testOuput_ = model(new_batch_x)  # .cpu()     # 从gpu中取回cpu算准确度
         # 需要从gpu的显存中取回内存进行计算正误率
         testOuput_ = getMaxIndex(testOuput_)
         # softmax是14个概率的输出
