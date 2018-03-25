@@ -1,20 +1,23 @@
 # coding:utf-8
+import Tkinter
 import os
 import pickle
 import threading
 import time
-
-import Tkinter
-import myo
 from Tkinter import TOP, LEFT, END
+
+import myo
 from myo import VibrationType
 
 DATA_PATH = os.getcwd() + '\\data'
 TYPE_LIST = ['acc', 'emg', 'gyr']
 GESTURES_TABLE = ['肉 ', '鸡蛋 ', '喜欢 ', '您好 ', '你 ', '什么 ', '想 ', '我 ', '很 ', '吃 ',
-                  '老师 ', '发烧 ', '谢谢 ', '']
+                  '老师 ', '发烧 ', '谢谢 ', '空手语']
+GESTURES_SELECTED_LIST = [0 for i in range(len(GESTURES_TABLE))]
+
+
 SIGN_COUNT = 14
-CAPTURE_TIMES = 22
+CAPTURE_TIMES = 3
 
 STATE_END_OF_CAPTURE = -1
 # 一个手势的一次采集结束
@@ -66,8 +69,6 @@ class CaptureStore:
             # 当前batch采集的所有数据
             self.curr_capture_sign_data = self.capture_data[-1]
             # 当前手语每次采集的数据
-            self.curr_capture_sign_num = len(self.capture_data)
-            # 当前手语id
         except IOError:
             self.capture_batch = next_batch()
             self.capture_data = []
@@ -77,8 +78,14 @@ class CaptureStore:
                 'emg': [],
             }
             self.capture_data.append(self.curr_capture_sign_data)
-            self.curr_capture_sign_num = len(self.capture_data)
 
+    @property
+    def curr_capture_sign_num(self):
+        return len(self.capture_data)
+
+    @property
+    def curr_capture_times(self):
+        return len(self.curr_capture_sign_data['acc'])
 
     def append_data(self, acc_data, gyr_data, emg_data):
         """
@@ -93,29 +100,44 @@ class CaptureStore:
         self.curr_capture_sign_data['gyr'].append(gyr_data)
         self.curr_capture_sign_data['emg'].append(emg_data)
 
-    def get_curr_capture_times(self):
-        return len(self.curr_capture_sign_data['acc'])
 
     def is_capture_times_satisfy(self):
         return len(self.curr_capture_sign_data['acc']) >= CAPTURE_TIMES
 
     def is_empty(self):
-        return self.get_curr_capture_times() == 0
+        return self.curr_capture_times == 0
 
     def next_sign(self):
         # 当前batch每种手语采集完毕
-        if self.curr_capture_sign_num >= SIGN_COUNT:
+        while self.curr_capture_sign_num < len(GESTURES_TABLE):
+            self.curr_capture_sign_data = {
+                'acc': [],
+                'gyr': [],
+                'emg': [],
+            }
+            self.capture_data.append(self.curr_capture_sign_data)
+            # curr_capture_sign_num 以列表为主 每种手语capture之前都会先push一个dict
+            # 因此capture_sign_num 从1开始 与手语标号相同
+            # 而手语列表总是从0开始  因此以sign_num访问gesture_table时 要减一
+            if GESTURES_SELECTED_LIST[self.curr_capture_sign_num - 1].get() == 1:
+                break
+
+        if self.curr_capture_sign_num == len(GESTURES_TABLE):
             self.save_to_file()
             self.capture_batch = next_batch()
             self.capture_data = []
+            self.init_curr_capture_sign()
 
-        self.curr_capture_sign_data = {
-            'acc': [],
-            'gyr': [],
-            'emg': [],
-        }
-        self.capture_data.append(self.curr_capture_sign_data)
-        self.curr_capture_sign_num = len(self.capture_data)
+    def init_curr_capture_sign(self):
+        while GESTURES_SELECTED_LIST[self.curr_capture_sign_num - 1].get() != 1:
+            self.curr_capture_sign_data = {
+                'acc': [],
+                'gyr': [],
+                'emg': [],
+            }
+            self.capture_data.append(self.curr_capture_sign_data)
+
+
 
     def discard_curr_sign(self):
         self.curr_capture_sign_data = {
@@ -123,12 +145,13 @@ class CaptureStore:
             'gyr': [],
             'emg': [],
         }
-        self.capture_data = self.capture_data[:-1]
-        self.curr_capture_sign_num = len(self.capture_data)
-        self.curr_capture_sign_data = self.capture_data[-1]
+        if len(self.capture_data) >= 1:
+            self.capture_data.pop()
+            self.capture_data.append(self.curr_capture_sign_data)
+
 
     def discard_curr_capture(self):
-        if len(self.curr_capture_sign_data['acc']) != 0:
+        if len(self.curr_capture_sign_data['acc']) > 0:
             self.curr_capture_sign_data['acc'].pop()
             self.curr_capture_sign_data['gyr'].pop()
             self.curr_capture_sign_data['emg'].pop()
@@ -171,7 +194,7 @@ class CaptureStore:
               (self.capture_batch,
                self.curr_capture_sign_num,
                GESTURES_TABLE[self.curr_capture_sign_num - 1],
-               self.get_curr_capture_times())
+               self.curr_capture_times)
         return res
 
 class CaptureControl(object):
@@ -186,7 +209,7 @@ class CaptureControl(object):
         self.Acc = []
         self.Gyr = []
         self.capture_store = CaptureStore()
-        self.curr_capture_tag = self.capture_store.get_curr_capture_times() + 1
+        self.curr_capture_tag = self.capture_store.curr_capture_times + 1
         self.view = view
         self.is_cap_discard = False
         self.is_cap_store = False
@@ -237,7 +260,7 @@ class CaptureControl(object):
 
     # 每次采集的长度是通过采集次数限制的
     def cap_data(self):
-        next_tag_num = self.capture_store.get_curr_capture_times()
+        next_tag_num = self.capture_store.curr_capture_times
         self.Emg.append(self._myo_device.emg + (next_tag_num,))
         self.Acc.append([it for it in self._myo_device.acceleration])
         self.Gyr.append([it for it in self._myo_device.gyroscope])
@@ -262,6 +285,10 @@ class CaptureControl(object):
                and len(self.Emg) == 180
 
     def start_capture(self):
+        if 1 not in [each.get() for each in GESTURES_SELECTED_LIST]:
+            return
+        else:
+            self.capture_store.init_curr_capture_sign()
         self.capture_state = STATE_START_CAPTURE
 
     def auto_continue_capture(self):
@@ -270,31 +297,32 @@ class CaptureControl(object):
         self.is_last_cap = False
         self.is_cap_store = True
         if self.is_auto_capture:
-            self.start_capture()
+            self.capture_state = STATE_START_CAPTURE
         self.update_capture_state_info()
 
     def store_single_capture_data(self):
+        self.is_cap_store = True
         self.capture_store.append_data(self.Acc, self.Gyr, self.Emg)
         self.update_capture_state_info()
+        if self.is_auto_capture:
+            self.start_capture()
 
     def continue_capture(self):
         if not self.is_cap_store and len(self.Acc) == 180:
             self.store_single_capture_data()
-        self.is_cap_store = True
-
         if not self.is_auto_capture:
-            self.start_capture()
+            self.capture_state = STATE_START_CAPTURE
 
         self.update_capture_state_info()
 
     def discard_capture(self):
         if self.capture_state == STATE_STANDBY:
             self.is_cap_discard = True
-            if not self.is_auto_capture:
+            if self.is_auto_capture:
                 self.start_capture()
-        else:
-            self.capture_store.discard_curr_sign()
-        self.update_capture_state_info()
+            else:
+                self.pause_capture()
+                self.update_capture_state_info()
 
     def discard_sign(self):
         self.capture_store.discard_curr_sign()
@@ -307,9 +335,9 @@ class CaptureControl(object):
     def stop_capture(self):
         self.capture_state = STATE_STOP_COLLECTION
         self.update_capture_state_info()
-        self.view.distroy_window()
-        if self.capture_store.get_curr_capture_times() == 1 \
-                and self.capture_store.get_curr_capture_times() == 0:
+        self.view.distory_window()
+        if self.capture_store.curr_capture_times == 1 \
+                and self.capture_store.curr_capture_times == 0:
             num = get_max_batch_num() - 1
             file_ = open('batch_num', 'w')
             file_.write(str(num))
@@ -346,8 +374,15 @@ class ControlPanel:
         self.info_display.pack()
         self.text = ''
         self.wrap_window = wrap_window
+
+        self.sign_select_frame = Tkinter.Frame(wrap_window)
+        self.sign_select_frame.pack(side=TOP)
+
         self.button_frame = Tkinter.Frame(wrap_window)
         self.button_frame.pack(side=TOP)
+
+        self.init_signs_select_checkbox()
+
 
     def set_control(self, capture_control):
         button_start_capture = Tkinter.Button(self.button_frame,
@@ -368,12 +403,13 @@ class ControlPanel:
         button_discard_capture.pack(side=LEFT)
         button_save_capture = Tkinter.Button(self.button_frame,
                                              text='保存此次采集',
-                                             command=capture_control.continue_capture)
+                                             command=capture_control.store_single_capture_data)
         button_save_capture.pack(side=LEFT)
         button_save_capture = Tkinter.Button(self.button_frame,
                                              text='删除该手语的采集',
                                              command=capture_control.discard_sign)
         button_save_capture.pack(side=LEFT)
+
         button = Tkinter.Button(self.button_frame,
                                 text="退出",
                                 command=capture_control.stop_capture)
@@ -387,7 +423,19 @@ class ControlPanel:
         self.info_display.delete(1.0, END)
         self.info_display.insert(END, self.text)
 
-    def distroy_window(self):
+    def init_signs_select_checkbox(self):
+        for each in range(len(GESTURES_TABLE)):
+            var = Tkinter.IntVar()
+            GESTURES_SELECTED_LIST[each] = var
+            button = Tkinter.Checkbutton(self.sign_select_frame,
+                                         text=GESTURES_TABLE[each],
+                                         variable=var)
+            if each < 7:
+                button.grid(row=0, column=each)
+            else:
+                button.grid(row=1, column=each - 7)
+
+    def distory_window(self):
         self.wrap_window.destroy()
 
 class CaptureThread(threading.Thread):
@@ -429,7 +477,7 @@ def main():
         myo_device.set_stream_emg(myo.StreamEmg.enabled)
         wrap_window = Tkinter.Tk()
         wrap_window.title('collect')
-        wrap_window.geometry('480x370')
+        wrap_window.geometry('640x480')
         panel = ControlPanel(wrap_window)
         capture_control = CaptureControl(myo_device, panel)
         panel.set_control(capture_control)

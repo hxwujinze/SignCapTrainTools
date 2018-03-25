@@ -182,7 +182,7 @@ for epoch in range(0, 681):
         new_batch_x = torch.stack(new_batch_x)
 
         batch_out = model(new_batch_x)
-        batch_out = torch.squeeze(batch_out)
+        batch_out = torch.squeeze(batch_out)    
         loss = loss_func(batch_out, batch_y)
         optimizer.zero_grad()
         loss.backward()

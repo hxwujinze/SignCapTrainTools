@@ -1,5 +1,4 @@
 # coding:utf-8
-
 # py3
 import os
 import pickle
@@ -84,21 +83,23 @@ def Load_ALL_Data(sign_id, batch_num):
     file_gyr = Path + '\\' + str(batch_num) + '\\Gyroscope\\' + str(file_num) + '.txt'
     data_gyr = file2matrix(file_gyr, Width_GYR)
     print('Load done')
-    capture_tag_list = list(data_emg[:, -1])
-    capture_length_book = {}
-    for i in capture_tag_list:
-        capture_length_book[i] = capture_length_book.get(i, 0) + 1
-    Index = 0
     resize_data_emg = []
     resize_data_acc = []
     resize_data_gyr = []
-    for i in range(1, 21):
-        resize_data_emg.append(Length_Adjust(data_emg[Index:Index + capture_length_book[i], 0:8]))
-        resize_data_acc.append(Length_Adjust(data_acc[Index:Index + capture_length_book[i], :]))
-        resize_data_gyr.append(Length_Adjust(data_gyr[Index:Index + capture_length_book[i], :]))
-        Index += capture_length_book[i]
+    if len(data_emg) != 0:
+        capture_tag_list = list(data_emg[:, -1])
+        capture_length_book = {}
+        for i in capture_tag_list:
+            capture_length_book[i] = capture_length_book.get(i, 0) + 1
+        Index = 0
+        capture_times = len(capture_length_book.keys())
+        for i in range(1, capture_times):
+            resize_data_emg.append(Length_Adjust(data_emg[Index:Index + capture_length_book[i], 0:8]))
+            resize_data_acc.append(Length_Adjust(data_acc[Index:Index + capture_length_book[i], :]))
+            resize_data_gyr.append(Length_Adjust(data_gyr[Index:Index + capture_length_book[i], :]))
+            Index += capture_length_book[i]
 
-    print("data resized")
+        print("data resized")
     return {
         'emg': resize_data_emg,  # 包含这个手语多次采集的数据矩阵的list
         'acc': resize_data_acc,
@@ -128,7 +129,7 @@ def print_plot(data_set, data_cap_type, data_feat_type):
         capture_times = capture_times if capture_times < 11 else 11
         # 最多只绘制十次采集的数据 （太多了会看不清）
         handle_lines_map = {}
-        for capture_num in range(0, 18):
+        for capture_num in range(0, capture_times):
             single_capture_data = trans_data_to_time_seqs(data_set[data_feat_type][capture_num])
             data = single_capture_data[dimension]
             l = plt.plot(range(len(data)), data, '.-', label='cap %d' % capture_num, )
@@ -441,14 +442,14 @@ def emg_wave_trans(data_set):
     return res_list
 
 def main():
-    sign_id = 8
+    sign_id = 3
     # 从采集文件获取数据
-    data_set = Load_ALL_Data(sign_id=sign_id, batch_num=12)
+    data_set = Load_ALL_Data(sign_id=sign_id, batch_num=91)
     # 从feedback文件获取数据
     # data_set = load_from_file_feed_back()[sign_id]
 
     # 数据采集类型 emg acc gyr
-    data_cap_type = 'acc'
+    data_cap_type = 'emg'
 
     # 数据特征类型 zc rms arc
     data_feat_type = 'raw'
@@ -461,7 +462,7 @@ def main():
     print_plot(data_set, data_cap_type, data_feat_type)
 
     # 将采集数据转换为训练数据
-    pickle_to_file(batch_num=12)
+    # pickle_to_file(batch_num=12)
 
 if __name__ == "__main__":
     main()
