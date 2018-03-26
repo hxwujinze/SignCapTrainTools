@@ -1,0 +1,8 @@
+batch_size:64
+acc_result:0.920000
+loss 1.7548
+25 *3
+25 - 14 - 14
+softmax
+
+new feature extract

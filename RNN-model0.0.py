@@ -14,15 +14,11 @@ from torch.autograd import Variable
 # 由于softmax输出的是十四个概率值 于是取最大的那个就是最可能正确的答案
 # 取最大值 并且转换为int
 def getMaxIndex(tensor):
+    # print('置信度')
+    # print(tensor[60].data.float())
     tensor = torch.max(tensor, dim=1)[1]
     # 对矩阵延一个固定方向取最大值
     return torch.squeeze(tensor).data.int()
-
-# normalize
-def scale_data_block(data_block):
-    for each_line in data_block:
-        for each_feat_dim in range(len(SCALE)):
-            each_line[each_feat_dim] /= SCALE[each_feat_dim]
 
 CUDA_AVAILABLE = torch.cuda.is_available()
 print('cuda_status: %s' % str(CUDA_AVAILABLE))
@@ -45,20 +41,10 @@ except IndexError:
 
 random.shuffle(rawData)
 
-f = open(DATA_DIR_PATH + '\\scale_rnn', 'r+b')
-SCALE = pickle.load(f)
-f.close()
-
-f = open(DATA_DIR_PATH + '\\scale_rnn', 'w+b')
-pickle.dump(SCALE, f, protocol=2)
-f.close()
-
 # process data
 dataInput, dataLabel = [], []
 for (labelItem, dataItem) in rawData:
     if len(dataItem) == 10:
-        # 归一化
-        scale_data_block(dataItem)
         dataInput.append(dataItem)
         dataLabel.append(labelItem - 1)
     else:
@@ -86,7 +72,7 @@ class LSTM(nn.Module):
     def __init__(self):
         super(LSTM, self).__init__()
         self.lstm = nn.LSTM(
-            input_size=25,  # feature's number
+            input_size=44,  # feature's number
             # 2*(3+3+3*4) +(8 + 8 +4*8)
             hidden_size=25,  # hidden size of rnn layers
             num_layers=3,  # the number of rnn layers
@@ -98,8 +84,8 @@ class LSTM(nn.Module):
         # 在训练时，每次随机（如 50% 概率）忽略隐层的某些节点；
         # 这样，我们相当于随机从 2^H 个模型中采样选择模型；同时，由于每个网络只见过一个训练数据
         # 使得模型保存一定的随机性 避免过拟合严重
-        self.out = nn.Linear(25, 16)
-        self.out2 = nn.Linear(16, 14)
+        self.out = nn.Linear(25, 14)
+        self.out2 = nn.Linear(14, 14)
         # use soft max classifier.
         # 在输出层中间加了层softmax 用于分类
         # softmax将会输出这十四个结果每个可能是正确的概率
@@ -114,7 +100,7 @@ class LSTM(nn.Module):
         # return out
 
         out2 = self.out2(out)
-        out2 = F.softmax(out2, dim=1)
+        out2 = F.softmax(out2)
         return out2
 
 class AutoEncoder(nn.Module):
@@ -171,17 +157,17 @@ for epoch in range(0, 681):
     for batch_x, batch_y in loader:
         batch_x = Variable(batch_x)  # .cuda()
         batch_y = Variable(batch_y)  # .cuda()
-        new_batch_x = []
-        for each_block in batch_x:
-            input_block = []
-            for each_line in each_block:
-                encode, decode = encoder(each_line)
-                input_block.append(encode)
-            input_block = torch.stack(input_block)
-            new_batch_x.append(input_block)
-        new_batch_x = torch.stack(new_batch_x)
+        # new_batch_x = []
+        # for each_block in batch_x:
+        #     input_block = []
+        #     for each_line in each_block:
+        #         encode, decode = encoder(each_line)
+        #         input_block.append(encode)
+        #     input_block = torch.stack(input_block)
+        #     new_batch_x.append(input_block)
+        # new_batch_x = torch.stack(new_batch_x)
 
-        batch_out = model(new_batch_x)
+        batch_out = model(batch_x)
         batch_out = torch.squeeze(batch_out)    
         loss = loss_func(batch_out, batch_y)
         optimizer.zero_grad()
@@ -191,20 +177,20 @@ for epoch in range(0, 681):
         model.eval()
         # 转换为求值模式
         testInput_ = Variable(testInput)  #.cuda()  # 转换在gpu内跑识别
-        new_batch_x = []
-        for each_block in testInput_:
-            input_block = []
-            is_first_line = True
-            for each_line in each_block:
-                encode, decode = encoder(each_line)
-                input_block.append(encode)
-            input_block = torch.stack(input_block)
-            new_batch_x.append(input_block)
-        new_batch_x = torch.stack(new_batch_x)
+        # new_batch_x = []
+        # for each_block in testInput_:
+        #     input_block = []
+        #     is_first_line = True
+        #     for each_line in each_block:
+        #         encode, decode = encoder(each_line)
+        #         input_block.append(encode)
+        # input_block = torch.stack(input_block)
+        # new_batch_x.append(input_block)
+        # new_batch_x = torch.stack(new_batch_x)
 
         # 转换为可读取的输入 Variable
         # 如下进行nn的正向使用 分类
-        testOuput_ = model(new_batch_x)  # .cpu()     # 从gpu中取回cpu算准确度
+        testOuput_ = model(testInput_)  # .cpu()     # 从gpu中取回cpu算准确度
         # 需要从gpu的显存中取回内存进行计算正误率
         testOuput_ = getMaxIndex(testOuput_)
         # softmax是14个概率的输出

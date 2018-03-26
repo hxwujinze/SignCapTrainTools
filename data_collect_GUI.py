@@ -17,7 +17,7 @@ GESTURES_SELECTED_LIST = [0 for i in range(len(GESTURES_TABLE))]
 
 
 SIGN_COUNT = 14
-CAPTURE_TIMES = 3
+CAPTURE_TIMES = 22
 
 STATE_END_OF_CAPTURE = -1
 # 一个手势的一次采集结束
@@ -109,7 +109,7 @@ class CaptureStore:
 
     def next_sign(self):
         # 当前batch每种手语采集完毕
-        while self.curr_capture_sign_num < len(GESTURES_TABLE):
+        while self.curr_capture_sign_num <= len(GESTURES_TABLE):
             self.curr_capture_sign_data = {
                 'acc': [],
                 'gyr': [],
@@ -122,7 +122,7 @@ class CaptureStore:
             if GESTURES_SELECTED_LIST[self.curr_capture_sign_num - 1].get() == 1:
                 break
 
-        if self.curr_capture_sign_num == len(GESTURES_TABLE):
+        if self.curr_capture_sign_num == len(GESTURES_TABLE) + 1:
             self.save_to_file()
             self.capture_batch = next_batch()
             self.capture_data = []
@@ -343,11 +343,6 @@ class CaptureControl(object):
             file_.write(str(num))
             file_.close()
 
-        # todo debug ,remove
-        data = self.capture_store.curr_capture_sign_data
-        file_ = open('data_aaa', 'w+b')
-        pickle.dump(data, file_)
-        file_.close()
 
     def auto_capture(self):
         self.is_auto_capture = False if self.is_auto_capture else True
@@ -370,12 +365,16 @@ class ControlPanel:
     def __init__(self, wrap_window):
         self.info_frame = Tkinter.Frame(wrap_window)
         self.info_frame.pack()
-        self.info_display = Tkinter.Text(self.info_frame)
-        self.info_display.pack()
+        self.info_display = Tkinter.Text(self.info_frame,
+                                         font=("黑体", 15, "normal"),
+                                         height=15,
+                                         width=50)
+        self.info_display.pack(side=TOP)
         self.text = ''
         self.wrap_window = wrap_window
 
-        self.sign_select_frame = Tkinter.Frame(wrap_window)
+        self.sign_select_frame = Tkinter.Frame(wrap_window, )
+
         self.sign_select_frame.pack(side=TOP)
 
         self.button_frame = Tkinter.Frame(wrap_window)
@@ -387,31 +386,38 @@ class ControlPanel:
     def set_control(self, capture_control):
         button_start_capture = Tkinter.Button(self.button_frame,
                                               text='开始采集',
+                                              font=("新宋体", 12, "normal"),
                                               command=capture_control.start_capture)
         button_start_capture.pack(side=LEFT)
         button_auto_capture = Tkinter.Button(self.button_frame,
                                              text='自动采集',
+                                             font=("新宋体", 12, "normal"),
                                              command=capture_control.auto_capture)
         button_auto_capture.pack(side=LEFT)
         button_pause_capture = Tkinter.Button(self.button_frame,
                                               text='暂停采集',
+                                              font=("新宋体", 12, "normal"),
                                               command=capture_control.pause_capture)
         button_pause_capture.pack(side=LEFT)
         button_discard_capture = Tkinter.Button(self.button_frame,
                                                 text='丢弃此次采集',
+                                                font=("新宋体", 12, "normal"),
                                                 command=capture_control.discard_capture)
         button_discard_capture.pack(side=LEFT)
         button_save_capture = Tkinter.Button(self.button_frame,
                                              text='保存此次采集',
+                                             font=("新宋体", 12, "normal"),
                                              command=capture_control.store_single_capture_data)
         button_save_capture.pack(side=LEFT)
         button_save_capture = Tkinter.Button(self.button_frame,
                                              text='删除该手语的采集',
+                                             font=("新宋体", 12, "normal"),
                                              command=capture_control.discard_sign)
         button_save_capture.pack(side=LEFT)
 
         button = Tkinter.Button(self.button_frame,
                                 text="退出",
+                                font=("新宋体", 12, "normal"),
                                 command=capture_control.stop_capture)
         button.pack(side=LEFT)
 
@@ -429,11 +435,23 @@ class ControlPanel:
             GESTURES_SELECTED_LIST[each] = var
             button = Tkinter.Checkbutton(self.sign_select_frame,
                                          text=GESTURES_TABLE[each],
+                                         font=("新宋体", 12, "normal"),
                                          variable=var)
             if each < 7:
                 button.grid(row=0, column=each)
             else:
                 button.grid(row=1, column=each - 7)
+        button = Tkinter.Button(self.sign_select_frame,
+                                text='全选',
+                                font=("新宋体", 12, "normal"),
+                                command=select_all_sign)
+        button.grid(row=2, column=0)
+
+        button = Tkinter.Button(self.sign_select_frame,
+                                text='反选',
+                                font=("新宋体", 12, "normal"),
+                                command=deselect_all)
+        button.grid(row=2, column=1)
 
     def distory_window(self):
         self.wrap_window.destroy()
@@ -446,6 +464,17 @@ class CaptureThread(threading.Thread):
     def run(self):
         self.capture_control.start()
         return
+
+def select_all_sign():
+    for each in GESTURES_SELECTED_LIST:
+        each.set(1)
+
+def deselect_all():
+    for each in GESTURES_SELECTED_LIST:
+        if each.get() != 0:
+            each.set(0)
+        else:
+            each.set(1)
 
 
 def get_max_batch_num():
@@ -476,7 +505,7 @@ def main():
         myo_device = myo_device[0]
         myo_device.set_stream_emg(myo.StreamEmg.enabled)
         wrap_window = Tkinter.Tk()
-        wrap_window.title('collect')
+        wrap_window.title('手语采集')
         wrap_window.geometry('640x480')
         panel = ControlPanel(wrap_window)
         capture_control = CaptureControl(myo_device, panel)

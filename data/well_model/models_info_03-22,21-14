@@ -1,0 +1,7 @@
+batch_size:64
+acc_result:1.000000
+44 -> 26*3
+loss 1.7548
+26 - 16 - 14
+softmax
+moredata 3000+
