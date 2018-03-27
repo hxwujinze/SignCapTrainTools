@@ -119,14 +119,20 @@ class CaptureStore:
             # curr_capture_sign_num 以列表为主 每种手语capture之前都会先push一个dict
             # 因此capture_sign_num 从1开始 与手语标号相同
             # 而手语列表总是从0开始  因此以sign_num访问gesture_table时 要减一
+
+            # 最后一个手语采集完成
+            if self.curr_capture_sign_num == len(GESTURES_TABLE) + 1:
+                self.capture_data.pop()
+                self.save_to_file()
+                self.capture_batch = next_batch()
+                # init capture_data
+                self.capture_data = []
+                continue
+            # 到达一个被选择的采集手语
             if GESTURES_SELECTED_LIST[self.curr_capture_sign_num - 1].get() == 1:
                 break
 
-        if self.curr_capture_sign_num == len(GESTURES_TABLE) + 1:
-            self.save_to_file()
-            self.capture_batch = next_batch()
-            self.capture_data = []
-            self.init_curr_capture_sign()
+
 
     def init_curr_capture_sign(self):
         while GESTURES_SELECTED_LIST[self.curr_capture_sign_num - 1].get() != 1:
@@ -167,6 +173,9 @@ class CaptureStore:
             data_load_path = os.path.join(curr_data_path, dir_name)
             os.makedirs(data_load_path)
             for cap_num in range(len(self.capture_data)):
+                # 没有录的手语不保存成txt
+                if len(self.capture_data[cap_num]['acc']) == 0:
+                    continue
                 file_path = os.path.join(data_load_path, str(cap_num + 1) + '.txt')
                 file_ = open(file_path, 'w')
                 cap_data = self.capture_data[cap_num][data_type]
@@ -437,10 +446,7 @@ class ControlPanel:
                                          text=GESTURES_TABLE[each],
                                          font=("新宋体", 12, "normal"),
                                          variable=var)
-            if each < 7:
-                button.grid(row=0, column=each)
-            else:
-                button.grid(row=1, column=each - 7)
+            button.grid(row=int(each / 7), column=each % 7)
         button = Tkinter.Button(self.sign_select_frame,
                                 text='全选',
                                 font=("新宋体", 12, "normal"),

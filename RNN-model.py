@@ -24,7 +24,11 @@ CUDA_AVAILABLE = torch.cuda.is_available()
 print('cuda_status: %s' % str(CUDA_AVAILABLE))
 
 DATA_DIR_PATH = os.getcwd() + '\\data'
-BATCH_SIZE = 64
+BATCH_SIZE = 128
+EPOCH = 800
+NNet_SIZE = 25
+NNet_LEVEL = 3
+LEARNING_RATE = 0.0005
 
 
 # load data
@@ -55,8 +59,8 @@ dataInput = torch.from_numpy(np.array(dataInput)).float()
 dataLabel = torch.from_numpy(np.array(dataLabel))
 # split and batch with data loader
 # 0~100 test
-testInput = dataInput[:100]
-testLabel = dataLabel[:100]
+testInput = dataInput[:500]
+testLabel = dataLabel[:500]
 # 100~n train
 trainingInput = dataInput[101:]
 trainingLabel = dataLabel[101:]
@@ -74,8 +78,8 @@ class LSTM(nn.Module):
         self.lstm = nn.LSTM(
             input_size=44,  # feature's number
             # 2*(3+3+3*4) +(8 + 8 +4*8)
-            hidden_size=25,  # hidden size of rnn layers
-            num_layers=3,  # the number of rnn layers
+            hidden_size=NNet_SIZE,  # hidden size of rnn layers
+            num_layers=NNet_LEVEL,  # the number of rnn layers
             # hidden_size=20,  # hidden size of rnn layers
             # num_layers=2,  # the number of rnn layers
             batch_first=True,
@@ -132,18 +136,18 @@ class AutoEncoder(nn.Module):
 # define loss function and optimizer
 model = LSTM()
 
-encoder = AutoEncoder()
-encoder.load_state_dict(torch.load('autoencoder_model03-22,21-15.pkl'))
-encoder.eval()
+# encoder = AutoEncoder()
+# encoder.load_state_dict(torch.load('autoencoder_model03-22,21-15.pkl'))
+# encoder.eval()
 
-# model.cuda()
+model.cuda()
 # 转换为GPU对象
 
 model.train()
 # 转换为训练模式
 
 loss_func = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=0.0005, weight_decay=0.0000002)
+optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=0.0000002)
 # learning rate can be tuned for better performance
 
 start_time_raw = time.time()
@@ -152,11 +156,11 @@ print('start_at: %s' % start_time)
 
 # start training
 # epoch: 用所有训练数据跑一遍称为一次epoch
-for epoch in range(0, 681):
+for epoch in range(0, 801):
 
     for batch_x, batch_y in loader:
-        batch_x = Variable(batch_x)  # .cuda()
-        batch_y = Variable(batch_y)  # .cuda()
+        batch_x = Variable(batch_x).cuda()
+        batch_y = Variable(batch_y).cuda()
         # new_batch_x = []
         # for each_block in batch_x:
         #     input_block = []
@@ -176,7 +180,7 @@ for epoch in range(0, 681):
     if epoch % 20 == 0:
         model.eval()
         # 转换为求值模式
-        testInput_ = Variable(testInput)  #.cuda()  # 转换在gpu内跑识别
+        testInput_ = Variable(testInput).cuda()  # 转换在gpu内跑识别
         # new_batch_x = []
         # for each_block in testInput_:
         #     input_block = []
@@ -190,7 +194,7 @@ for epoch in range(0, 681):
 
         # 转换为可读取的输入 Variable
         # 如下进行nn的正向使用 分类
-        testOuput_ = model(testInput_)  # .cpu()     # 从gpu中取回cpu算准确度
+        testOuput_ = model(testInput_).cpu()  # 从gpu中取回cpu算准确度
         # 需要从gpu的显存中取回内存进行计算正误率
         testOuput_ = getMaxIndex(testOuput_)
         # softmax是14个概率的输出
@@ -219,7 +223,8 @@ end_time = time.strftime('%m-%d,%H-%M', time.localtime(end_time_raw))
 torch.save(model.state_dict(), 'model_param%s.pkl' % end_time)
 
 file = open('models_info_%s' % end_time, 'w')
-file.writelines('batch_size:%d\nacc_result:%f' % (BATCH_SIZE, result))
+file.writelines('batch_size:%d\nacc_result:%f\nloss: %f\nNNet:%d x %d' %
+                (BATCH_SIZE, result, loss.data.float()[0], NNet_LEVEL, NNet_SIZE))
 file.close()
 # how to read? :
 # model.load_state_dict(torch.load('model_param.pkl'))

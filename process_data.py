@@ -38,8 +38,13 @@ GESTURES_TABLE = ['肉 ', '鸡蛋 ', '喜欢 ', '您好 ', '你 ', '什么 ', '�
 def file2matrix(filename, data_col_num):
     del_sign = '()[]'
     separator = ','
-    fr = open(filename, 'r')
+    try:
+        fr = open(filename, 'r')
+    except IOError:
+        lines_num = 0
+        return np.zeros((lines_num, data_col_num), dtype=float)
     all_array_lines = fr.readlines()
+    fr.close()
     lines_num = len(all_array_lines)
     return_matrix = np.zeros((lines_num, data_col_num), dtype=float)
     index = 0
@@ -195,7 +200,7 @@ def pickle_to_file(batch_num, feedback_data=None):
     train_data = train_data[1]
 
     for each_batch in range(curr_batch_num + 1, batch_num + 1):
-        for each_sign in range(1, 15):
+        for each_sign in range(1, len(GESTURES_TABLE) + 1):
             # 一个手势一个手势的读入数据
             raw_data_set = Load_ALL_Data(batch_num=each_batch, sign_id=each_sign)
             extracted_data_set = []
@@ -494,27 +499,24 @@ def eliminate_zero_shift(data):
 
 
 def main():
-    sign_id = 1
+    sign_id = 8
     # 从采集文件获取数据
-    # data_set = Load_ALL_Data(sign_id=sign_id, batch_num=13)
+    data_set = Load_ALL_Data(sign_id=sign_id, batch_num=124)
     # 从feedback文件获取数据
     # data_set = load_from_file_feed_back()[sign_id]
 
     # 数据采集类型 emg acc gyr
-    data_cap_type = 'emg'
+    data_cap_type = 'acc'
 
     # 数据特征类型 zc rms arc
-    data_feat_type = 'trans'
+    data_feat_type = 'rms'
 
-    # if data_cap_type != 'emg':
-    #     data_set = feature_extract(data_set, data_cap_type)
-    # else:
-    #     data_set = __emg_feature_extract(data_set)
-    #
+    data_set = feature_extract(data_set, data_cap_type)
+
     # print_plot(data_set, data_cap_type, data_feat_type)
 
     # 将采集数据转换为训练数据
-    pickle_to_file(batch_num=14)
+    pickle_to_file(batch_num=124)
 
 if __name__ == "__main__":
     main()
