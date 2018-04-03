@@ -1,21 +1,17 @@
 # coding:utf-8
-from numpy import *
-from sklearn import preprocessing
+import os
+import pickle
 
-warnings.filterwarnings("ignore")
+from numpy import *
+from sklearn import cross_validation
+from sklearn import preprocessing
+from sklearn.cross_validation import train_test_split
+from sklearn.externals import joblib
 from sklearn.svm import SVC
 
-warnings.filterwarnings("ignore")
-from sklearn.externals import joblib
+DATA_DIR_PATH = os.getcwd() + '\\data'
 
-warnings.filterwarnings("ignore")
-from sklearn import cross_validation
 
-warnings.filterwarnings("ignore")
-from sklearn.cross_validation import train_test_split
-
-warnings.filterwarnings("ignore")
-import os
 
 def file2matrix(filename, del_sign, separator, Data_Columns):
     fr = open(filename, 'r')
@@ -177,18 +173,6 @@ def Standardization(All_Feat):
     print(len(max_abs_scaler.scale_))
     return Norm_Feat
 
-def Train_SVM(Norm_Feat, All_Label, C0=256, G0=0.0175):
-    clf = SVC(kernel='rbf', C=C0, gamma=G0)
-    scores = []
-    for i in range(10):
-        data_train, data_test, target_train, target_test = train_test_split(Norm_Feat, All_Label)
-        clf.fit(Norm_Feat, All_Label)
-        # clf.fit(data_train,target_train)
-        joblib.dump(clf, "train_model.m")
-        scores1 = cross_validation.cross_val_score(clf, data_test, target_test, cv=4)
-        scores += list(scores1)
-    return scores
-
 def Pre_processing():
     Path = os.getcwd()
     Seg_EMG, Seg_ACC, Seg_GYR = Folder_combination(Path, 5)
@@ -204,9 +188,40 @@ def Pre_processing():
     Norm_Feat = Standardization(All_Feat)
     return Norm_Feat, All_Label
 
+#  直接从rnn训练用的data_set里读取数据
+
+
+def trans_to_SVM_input(raw_data):
+    input_data = []
+    input_label = []
+    for (each_label, each_data) in raw_data[1]:
+        # 直接将数据进行展开
+        input_data.append(each_data.ravel())
+        input_label.append(each_label)
+    return input_data, input_label
+
+def Train_SVM(Norm_Feat, All_Label, C0=256, G0=0.0175):
+    clf = SVC(kernel='rbf', C=C0, gamma=G0)
+    scores = []
+    for i in range(10):
+        data_train, data_test, target_train, target_test = train_test_split(Norm_Feat, All_Label)
+        # clf.fit(Norm_Feat, All_Label)
+        clf.fit(data_train, target_train)
+        joblib.dump(clf, "train_model.m")
+        scores1 = cross_validation.cross_val_score(clf, data_test, target_test, cv=4)
+        scores += list(scores1)
+    return scores
+
+
 def main():
-    Norm_Feat, All_Label = Pre_processing()
-    scores = Train_SVM(Norm_Feat, All_Label)
+    # load data
+    f = open(DATA_DIR_PATH + '\\data_set', 'r+b')
+    raw_data = pickle.load(f)
+    f.close()
+
+    input_data, input_label = trans_to_SVM_input(raw_data)
+
+    scores = Train_SVM(input_data, input_label)
     scores_means = mean(scores)
     scores_var = 10000 * var(scores)
 

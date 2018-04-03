@@ -68,8 +68,8 @@ test_input_init = data_input[:500]
 test_label = data_label[:500]
 
 # 500~n train
-training_input = data_input[101:]
-training_label = data_label[101:]
+training_input = data_input[501:]
+training_label = data_label[501:]
 training_set = Data.TensorDataset(data_tensor=training_input,
                                   target_tensor=training_label)
 loader = Data.DataLoader(
@@ -179,6 +179,7 @@ cost_time = end_time_raw - start_time_raw
 cost_time = time.strftime('%H:%M:%S', time.gmtime(cost_time, ))
 print('cost time: %s' % cost_time)
 
+model = model.cpu()
 end_time = time.strftime('%m-%d,%H-%M', time.localtime(end_time_raw))
 torch.save(model.state_dict(), 'model_param%s.pkl' % end_time)
 
