@@ -1,22 +1,22 @@
 # coding:utf-8
-import Tkinter
 import os
 import pickle
 import threading
 import time
-from Tkinter import TOP, LEFT, END
 
+import Tkinter
 import myo
+from Tkinter import TOP, LEFT, END
 from myo import VibrationType
 
 DATA_PATH = os.getcwd() + '\\data'
 TYPE_LIST = ['acc', 'emg', 'gyr']
 GESTURES_TABLE = ['肉 ', '鸡蛋 ', '喜欢 ', '您好 ', '你 ', '什么 ', '想 ', '我 ', '很 ', '吃 ',
-                  '老师 ', '发烧 ', '谢谢 ', '空手语']
+                  '老师 ', '发烧 ', '谢谢 ', '空手语', '大家', '支持', '我们', '创新', '医生', '交流',
+                  '团队', '帮助', '聋哑人', '请', ]
 GESTURES_SELECTED_LIST = [0 for i in range(len(GESTURES_TABLE))]
 
-
-SIGN_COUNT = 14
+SIGN_COUNT = len(GESTURES_TABLE)
 CAPTURE_TIMES = 22
 
 STATE_END_OF_CAPTURE = -1
@@ -451,13 +451,13 @@ class ControlPanel:
                                 text='全选',
                                 font=("新宋体", 12, "normal"),
                                 command=select_all_sign)
-        button.grid(row=2, column=0)
+        button.grid(row=SIGN_COUNT / 7 + 1, column=0)
 
         button = Tkinter.Button(self.sign_select_frame,
                                 text='反选',
                                 font=("新宋体", 12, "normal"),
                                 command=deselect_all)
-        button.grid(row=2, column=1)
+        button.grid(row=SIGN_COUNT / 7 + 1, column=1)
 
     def distory_window(self):
         self.wrap_window.destroy()

@@ -33,7 +33,8 @@ TYPE_LEN = {
 CAP_TYPE_LIST = ['acc', 'gyr', 'emg']  # 直接在这里修改可去除emg
 # CAP_TYPE_LIST = ['acc', 'gyr', 'emg']
 GESTURES_TABLE = ['肉 ', '鸡蛋 ', '喜欢 ', '您好 ', '你 ', '什么 ', '想 ', '我 ', '很 ', '吃 ',
-                  '老师 ', '发烧 ', '谢谢 ', '']
+                  '老师 ', '发烧 ', '谢谢 ', '空手语', '大家', '支持', '我们', '创新', '医生', '交流',
+                  '团队', '帮助', '聋哑人', '请', ]
 
 def file2matrix(filename, data_col_num):
     del_sign = '()[]'
@@ -499,24 +500,24 @@ def eliminate_zero_shift(data):
 
 
 def main():
-    sign_id = 8
+    sign_id = 16
     # 从采集文件获取数据
-    data_set = Load_ALL_Data(sign_id=sign_id, batch_num=124)
+    data_set = Load_ALL_Data(sign_id=sign_id, batch_num=44)
     # 从feedback文件获取数据
     # data_set = load_from_file_feed_back()[sign_id]
 
     # 数据采集类型 emg acc gyr
-    data_cap_type = 'acc'
+    data_cap_type = 'emg'
 
     # 数据特征类型 zc rms arc
-    data_feat_type = 'rms'
+    data_feat_type = 'trans'
 
     data_set = feature_extract(data_set, data_cap_type)
 
     # print_plot(data_set, data_cap_type, data_feat_type)
 
     # 将采集数据转换为训练数据
-    pickle_to_file(batch_num=124)
+    pickle_to_file(batch_num=81)
 
 if __name__ == "__main__":
     main()
