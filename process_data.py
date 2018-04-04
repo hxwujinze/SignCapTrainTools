@@ -500,9 +500,9 @@ def eliminate_zero_shift(data):
 
 
 def main():
-    sign_id = 16
+    # sign_id = 16
     # 从采集文件获取数据
-    data_set = Load_ALL_Data(sign_id=sign_id, batch_num=44)
+    # data_set = Load_ALL_Data(sign_id=sign_id, batch_num=59)
     # 从feedback文件获取数据
     # data_set = load_from_file_feed_back()[sign_id]
 
@@ -512,12 +512,12 @@ def main():
     # 数据特征类型 zc rms arc
     data_feat_type = 'trans'
 
-    data_set = feature_extract(data_set, data_cap_type)
+    # data_set = feature_extract(data_set, data_cap_type)
 
     # print_plot(data_set, data_cap_type, data_feat_type)
 
     # 将采集数据转换为训练数据
-    pickle_to_file(batch_num=81)
+    pickle_to_file(batch_num=91)
 
 if __name__ == "__main__":
     main()

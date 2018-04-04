@@ -1,0 +1,7 @@
+batch_size:128
+accuracy:0.9333
+loss: 2.276620
+NNet:3 x 30
+Epoch: 1161
+NNet output size: 24
+classes cnt 24

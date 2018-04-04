@@ -1,6 +1,4 @@
 # coding:utf-8
-import os
-import pickle
 
 from numpy import *
 from sklearn import cross_validation
@@ -189,8 +187,6 @@ def Pre_processing():
     return Norm_Feat, All_Label
 
 #  直接从rnn训练用的data_set里读取数据
-
-
 def trans_to_SVM_input(raw_data):
     input_data = []
     input_label = []
