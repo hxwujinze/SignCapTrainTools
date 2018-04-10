@@ -28,7 +28,7 @@ print('cuda_status: %s' % str(CUDA_AVAILABLE))
 DATA_DIR_PATH = os.getcwd() + '\\data'
 
 # load data
-f = open(DATA_DIR_PATH + '\\data_set', 'r+b')
+f = open(DATA_DIR_PATH + '\\data_set_short', 'r+b')
 raw_data = pickle.load(f)
 f.close()
 
@@ -45,11 +45,11 @@ random.shuffle(raw_data)
 data_input, data_label = [], []
 cnt = 0
 for (each_label, each_data) in raw_data:
-    if len(each_data) == 10:
-        data_input.append(each_data)
-        data_label.append(each_label - 1)
-    else:
-        print("len error")
+    # if len(each_data) == 10:
+    data_input.append(each_data)
+    data_label.append(each_label - 1)
+    # else:
+    #     print("len error")
 print('data_len: %s' % len(data_input))
 
 data_input = torch.from_numpy(np.array(data_input)).float()

@@ -71,7 +71,7 @@ py2 py3 pickle 不能通用
 
 '''
 
-def Load_ALL_Data(sign_id, batch_num):
+def load_data(sign_id, batch_num):
     """
     从采集文件夹中读取采集数据 并对数据进行裁剪
     :param sign_id: 需要取得的手语id
@@ -82,14 +82,13 @@ def Load_ALL_Data(sign_id, batch_num):
     # initialization
     Path = DATA_DIR_PATH
     file_num = sign_id
-    print('Load ALL Data')
     file_emg = Path + '\\' + str(batch_num) + '\\Emg\\' + str(file_num) + '.txt'
     data_emg = file2matrix(file_emg, Width_EMG)
     file_acc = Path + '\\' + str(batch_num) + '\\Acceleration\\' + str(file_num) + '.txt'
     data_acc = file2matrix(file_acc, Width_ACC)
     file_gyr = Path + '\\' + str(batch_num) + '\\Gyroscope\\' + str(file_num) + '.txt'
     data_gyr = file2matrix(file_gyr, Width_GYR)
-    print('Load done')
+
     processed_data_emg = []
     processed_data_acc = []
     processed_data_gyr = []
@@ -102,31 +101,31 @@ def Load_ALL_Data(sign_id, batch_num):
         capture_times = len(capture_length_book.keys())
         capture_times = capture_times if capture_times < 20 else 21
         for i in range(1, capture_times):
-            resize_data_emg = Length_Adjust(data_emg[Index:Index + capture_length_book[i], 0:8])
+            resize_data_emg = length_adjust(data_emg[Index:Index + capture_length_book[i], 0:8])
             processed_data_emg.append(resize_data_emg)  # init
             # processed_data_emg.append(standardize(resize_data_emg))
             # processed_data_emg.append(normalize(resize_data_emg))
 
-            resize_data_acc = Length_Adjust(data_acc[Index:Index + capture_length_book[i], :])
+            resize_data_acc = length_adjust(data_acc[Index:Index + capture_length_book[i], :])
             processed_data_acc.append(resize_data_acc)
             # processed_data_acc.append(standardize(resize_data_acc))
             # processed_data_acc.append(normalize(resize_data_acc))
 
-            resize_data_gyr = Length_Adjust(data_gyr[Index:Index + capture_length_book[i], :])
+            resize_data_gyr = length_adjust(data_gyr[Index:Index + capture_length_book[i], :])
             processed_data_gyr.append(resize_data_gyr)
             # processed_data_gyr.append(standardize(resize_data_gyr))
             # processed_data_gyr.append(normalize(resize_data_gyr))
 
             Index += capture_length_book[i]
+        print('Load done , batch num: %d, sign id: %d, ' % (batch_num, sign_id,))
 
-        print("data resized")
     return {
         'emg': processed_data_emg,  # 包含这个手语多次采集的数据矩阵的list
         'acc': processed_data_acc,
         'gyr': processed_data_gyr,
     }
 
-def Length_Adjust(A):
+def length_adjust(A):
     tail_len = len(A) - LENGTH
     if tail_len < 0:
         print('Length Error')
@@ -142,17 +141,20 @@ def trans_data_to_time_seqs(data_set):
     return data_set.T
 
 normalize_scaler = preprocessing.MinMaxScaler()
-
+normalize_scale_collect = []
 def normalize(data):
     normalize_scaler.fit(data)
     data = normalize_scaler.transform(data)
+    curr_scale = [each for each in normalize_scaler.scale_]
+    normalize_scale_collect.append(curr_scale)
     return data
 
 standardize_scaler = preprocessing.StandardScaler()
-
+standardize_scale_collect = []
 def standardize(data):
     standardize_scaler.fit(data)
     data = standardize_scaler.transform(data)
+    standardize_scale_collect.append([each for each in standardize_scaler.scale_])
     return data
 
 
@@ -176,17 +178,23 @@ def print_plot(data_set, data_cap_type, data_feat_type):
         plt.pause(0.01)
     plt.show()
 
-def pickle_to_file(batch_num, feedback_data=None):
+def pickle_to_file(batch_num, online_mode=False, feedback_data=None):
     """
     从采集生成的文件夹中读取数据 存为python对象
 
     采用追加的方式 当采集文件夹数大于当前数据对象batch最大值时 进行数据的追加
     :param batch_num: 当前需要提取的采集数据文件夹数
+    :param online_mode: 是否生成online识别的短数据
     :param feedback_data 是否将之前feedback数据纳入训练集
     :return: None  过程函数
     """
+    data_set_file_name = 'data_set'
+    if online_mode:
+        data_set_file_name += '_short'
+
+
     try:
-        file = open(DATA_DIR_PATH + '\\data_set', 'r+b')
+        file = open(DATA_DIR_PATH + '\\' + data_set_file_name, 'r+b')
         train_data = pickle.load(file)
         file.close()
     except IOError:
@@ -203,7 +211,7 @@ def pickle_to_file(batch_num, feedback_data=None):
     for each_batch in range(curr_batch_num + 1, batch_num + 1):
         for each_sign in range(1, len(GESTURES_TABLE) + 1):
             # 一个手势一个手势的读入数据
-            raw_data_set = Load_ALL_Data(batch_num=each_batch, sign_id=each_sign)
+            raw_data_set = load_data(batch_num=each_batch, sign_id=each_sign)
             extracted_data_set = []
             # 根据数据采集种类 提取特征
             for each_cap_type in CAP_TYPE_LIST:
@@ -212,6 +220,9 @@ def pickle_to_file(batch_num, feedback_data=None):
             # 拼接特征 使其满足RNN的输入要求
             batch_list = append_feature_vector(extracted_data_set)
             for each_data_mat in batch_list:
+                if online_mode:
+                    each_data_mat = each_data_mat[1:9, :]
+
                 train_data.append((each_sign, each_data_mat))
     curr_data_set_cont = batch_num
 
@@ -234,8 +245,9 @@ def pickle_to_file(batch_num, feedback_data=None):
     else:
         train_data = (curr_data_set_cont, train_data)
 
+    # train_data format:
     # (batch_amount, data_set_emg)
-    file = open(DATA_DIR_PATH + '\\data_set', 'w+b')
+    file = open(DATA_DIR_PATH + '\\' + data_set_file_name, 'w+b')
     pickle.dump(train_data, file)
     file.close()
 
@@ -263,7 +275,7 @@ def __emg_feature_extract(data_set):
 
 #
 # def emg_feature_extract_single(data):
-#     data = Length_Adjust(data)
+#     data = length_adjust(data)
 #     window_amount = len(data) / EMG_WINDOW_SIZE
 #     # windows_data = data.reshape(window_amount, WINDOW_SIZE, TYPE_LEN[type_name])
 #     window_rest = len(data) % EMG_WINDOW_SIZE
@@ -309,8 +321,6 @@ def __emg_feature_extract(data_set):
 #     return seg_RMS_feat, seg_VAR_feat, seg_all_feat
 
 
-
-
 '''
 提取一个手势的一个batch的某一信号种类的全部数据
 数据形式保存不变 只改变数值和每次采集ndarray的长度
@@ -326,6 +336,10 @@ def feature_extract(data_set, type_name):
     :return: 一个dict 包含这个数据采集类型的原始数据,3种特征提取后的数据,特征拼接后的特征向量
             仍保持多次采集的数据放在一起
     """
+    global normalize_scale_collect
+    normalize_scale_collect = []
+    global standardize_scale_collect
+    standardize_scale_collect = []
     if type_name == 'emg':
         return __emg_feature_extract(data_set)
     data_set_rms_feat = []
@@ -350,7 +364,7 @@ def feature_extract(data_set, type_name):
     }
 
 def feature_extract_single(data, type_name):
-    data = Length_Adjust(data)
+    data = length_adjust(data)
     window_amount = len(data) / WINDOW_SIZE
     # windows_data = data.reshape(window_amount, WINDOW_SIZE, TYPE_LEN[type_name])
     windows_data = np.vsplit(data[0:160], window_amount)
@@ -446,7 +460,7 @@ def load_from_file_feed_back():
         r'C:\Users\Scarecrow\PycharmProjects\SignProjectServerPy2\utilities_access\models_data\feedback_data_'
     file_ = open(file_name, 'r+b')
     # file = open('data_aaa', 'r+b')
-    feedback_data_set = pickle.load(file_)
+    feedback_data_set = pickle.load(file_, encoding='iso-8859-1')
     # [ (sign_id, data), .....  ]
     file_.close()
     data_set = list(range(SIGN_COUNT))
@@ -455,17 +469,17 @@ def load_from_file_feed_back():
     return data_set
 
 def wavelet_trans(data):
-    data = np.array(data).T
-    data = pywt.threshold(data, 30, mode='hard')
-    data = pywt.wavedec(data, wavelet='db3', level=5)
+    data = np.array(data).T  # 转换为 通道 - 时序
+    data = pywt.threshold(data, 30, mode='hard')  # 阈值滤波
+    data = pywt.wavedec(data, wavelet='db3', level=5)  # 小波变换
     data = np.vstack((data[0].T, np.zeros(8))).T
-    # 再次阈值滤波
-    data = pywt.threshold(data, 20, mode='hard')
-    data = standardize(data)
-    data = eliminate_zero_shift(data)
-    data = np.abs(data)
-    # cap = normalize(cap)
-    return data.T
+    # 转换为 时序-通道 追加一个零点在转换回 通道-时序
+    data = pywt.threshold(data, 20, mode='hard')  # 再次阈值滤波
+    data = data.T
+    data = normalize(data)  # 转换为 时序-通道 以时序轴 对每个通道进行normalize
+    data = eliminate_zero_shift(data)  # 消除零点漂移
+    data = np.abs(data)  # 反转
+    return data  # 转换为 时序-通道 便于rnn输入
 
 def emg_wave_trans(data_set):
     res_list = []
@@ -497,27 +511,114 @@ def eliminate_zero_shift(data):
     data -= zero_point
     return data
 
+def get_feat_norm_scales():
+    # 0 ARC 1 RMS 2 ZC 3 ALL
+    feat_name = ['arc', 'rms', 'zc', 'all']
+    scales = {
+        'arc': [],
+        'rms': [],
+        'zc': [],
+        'all': [],
+    }
+    for each in normalize_scale_collect:
+        feat_no = normalize_scale_collect.index(each) % 4
+        scales[feat_name[feat_no]].append(each)
+    return scales
 
+def get_feat_std_scales():
+    scales = [each for each in standardize_scale_collect]
+    return scales
+
+def print_scale(cap_type, scale_feat_name):
+    """
+    获取特征提取后 向量归一化使用的scale
+    通过设置手语id的范围 和 batch id的范围，
+    来在不同散点图显示 各种手语在不同batch的scale情况
+    并能计算其平均值和中位数 保存至文件 在 在线识别的时候作为参照和默认归一化向量使用
+    :param cap_type:  数据采集的类型
+    :param scale_feat_name: 数据的特征类型 rms zc arc all （emg 只用all就好）
+    """
+    scale_list = []
+    fig = plt.figure()
+    fig.add_subplot(111, title='%s %s scales' % (cap_type, scale_feat_name))
+
+    # 设置batch的range
+    batch_range = list(range(8, 9))
+    # batch_range.extend(list(range(40, 75)))
+
+    # 扫描各个batch的各个手语
+    for batch_id in batch_range:  # batch id range
+        for sign_id in range(1, 2):  # sign id 或者是 batch id 的 range
+            if sign_id == 14:
+                continue
+            # scale_list = []
+            data_set = load_data(sign_id=sign_id, batch_num=batch_id)  # 循环从采集文件获取数据
+            feature_extract(data_set, cap_type)
+            if cap_type != 'emg':
+                scales = get_feat_norm_scales()
+                if scale_feat_name == 'arc':
+                    scale_list.extend(scales['all'])
+                    for each_val in range(len(scale_list)):
+                        scale_list[each_val] = scale_list[each_val][0:12]
+                else:
+                    scale_list.extend(scales[scale_feat_name])
+            else:
+                # emg 时 scale只有一个
+                scale_list.extend([each for each in normalize_scale_collect])
+            # 显示单个手语的scale的平均值
+            # scale_list = np.mean(scale_list, axis=0)
+            # plt.scatter(np.array(range(len(scale_list))), scale_list, marker='.')
+
+        # 输出每个手语的scale
+        for each in scale_list:
+            plt.scatter(np.array(range(len(each))), each, marker='.')
+
+        # 一个手语一个散点图
+        # fig = plt.figure()
+        # fig.add_subplot(111, title='sign id: %d %s scales' % (i, scale_feat_name))
+
+    # 计算所有手语的scale 平均值 和 中位数
+    # scale_list_mean = np.mean(scale_list, axis=0)
+    # scale_list_median = np.median(scale_list, axis=0)
+
+    # 将scale存入文件
+    # file_ = open('./scale_mean', 'w+b')
+    # pickle.dump(scale_list_mean,file_, protocol=2)
+    # file_.close()
+    # file_ = open('./scale_median', 'w+b')
+    # pickle.dump(scale_list_median, file_, protocol=2)
+    # file_.close()
+
+    # 绘制出scale平均值和中位数
+    # fig = plt.figure()
+    # fig.add_subplot(111, title='mean scale')
+    # plt.scatter(np.array(range(len(scale_list_mean))), scale_list_mean, marker='.', )
+    #
+    # fig_ = plt.figure()
+    # fig_.add_subplot(111, title='median scale')
+    # plt.scatter(np.array(range(len(scale_list_median))), scale_list_median, marker='.', )
+
+    plt.show()
+
+def print_data_plot(sign_id, batch_num, data_cap_type, data_feat_type):
+    data_set = load_data(sign_id=sign_id, batch_num=batch_num)  # 从采集文件获取数据
+    data_set = feature_extract(data_set, data_cap_type)
+    print_plot(data_set, data_cap_type, data_feat_type)
 
 def main():
-    # sign_id = 16
-    # 从采集文件获取数据
-    # data_set = Load_ALL_Data(sign_id=sign_id, batch_num=59)
     # 从feedback文件获取数据
     # data_set = load_from_file_feed_back()[sign_id]
 
-    # 数据采集类型 emg acc gyr
-    data_cap_type = 'emg'
+    # print_data_plot(sign_id=1,
+    #                 batch_num=2,
+    #                 data_cap_type='emg',  # 数据特征类型 zc rms arc trans(emg)
+    #                 data_feat_type='trans')  # 数据采集类型 emg acc gyr
 
-    # 数据特征类型 zc rms arc
-    data_feat_type = 'trans'
-
-    # data_set = feature_extract(data_set, data_cap_type)
-
-    # print_plot(data_set, data_cap_type, data_feat_type)
-
+    # print_scale('acc', 'all')
+    #
     # 将采集数据转换为训练数据
-    pickle_to_file(batch_num=91)
+    # pickle_to_file(batch_num=91, online_mode=True)
+    pickle_to_file(batch_num=91, online_mode=False)
 
 if __name__ == "__main__":
     main()
