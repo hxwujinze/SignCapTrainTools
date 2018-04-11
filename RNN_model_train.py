@@ -28,7 +28,7 @@ print('cuda_status: %s' % str(CUDA_AVAILABLE))
 DATA_DIR_PATH = os.getcwd() + '\\data'
 
 # load data
-f = open(DATA_DIR_PATH + '\\data_set_short', 'r+b')
+f = open(DATA_DIR_PATH + '\\data_set', 'r+b')
 raw_data = pickle.load(f)
 f.close()
 
@@ -41,16 +41,25 @@ except IndexError:
 
 random.shuffle(raw_data)
 
+SHORT_INPUT = False
+
 # process data
 data_input, data_label = [], []
 cnt = 0
 for (each_label, each_data) in raw_data:
     # if len(each_data) == 10:
-    data_input.append(each_data)
+    if SHORT_INPUT:
+        data_input.append(each_data[1:9])
+    else:
+        data_input.append(each_data)
     data_label.append(each_label - 1)
     # else:
     #     print("len error")
-print('data_len: %s' % len(data_input))
+
+DATA_SET_SIZE = len(data_input)
+INPUT_LEN = len(data_input[0])
+print('data_len: %s' % DATA_SET_SIZE)
+print('each input len: %s' % INPUT_LEN)
 
 data_input = torch.from_numpy(np.array(data_input)).float()
 data_label = torch.from_numpy(np.array(data_label))
@@ -132,12 +141,13 @@ print('cost time: %s' % cost_time)
 
 end_time = time.strftime('%m-%d,%H-%M', time.localtime(end_time_raw))
 model = model.cpu()
-torch.save(model.state_dict(), 'model_param%s.pkl' % end_time)
+torch.save(model.state_dict(), DATA_DIR_PATH + '\\model_param%s.pkl' % end_time)
 
-file = open('models_info_%s' % end_time, 'w')
+file = open(DATA_DIR_PATH + '\\models_info_%s' % end_time, 'w')
 file.writelines(
-    'batch_size:%d\naccuracy:%.4f\nloss: %f\nNNet:%d x %d\nEpoch: %d\nNNet output size: %d\nclasses cnt %d\nlearning rate %f\nweight_decay %f\ndropout %f' %
-    (BATCH_SIZE, result, loss.data.float()[0], NNet_LEVEL, NNet_SIZE, EPOCH, NNet_output_size, CLASS_COUNT,
+    'data_set_size:%d\ninput_size:%d\nbatch_size:%d\naccuracy:%.4f\nloss: %f\nNNet:%d x %d\nEpoch: %d\nNNet output size: %d\nclasses cnt %d\nlearning rate %f\nweight_decay %f\ndropout %f' %
+    (DATA_SET_SIZE, INPUT_LEN, BATCH_SIZE, result, loss.data.float()[0], NNet_LEVEL, NNet_SIZE, EPOCH, NNet_output_size,
+     CLASS_COUNT,
      LEARNING_RATE, WEIGHT_DECAY, DROPOUT))
 file.close()
 # how to read? :

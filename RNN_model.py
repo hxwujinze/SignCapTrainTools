@@ -1,12 +1,14 @@
-"""
-每次调整模型修改这里
-修改完成进行部署时直接将该文件复制到服务器目录
-"""
+
 import torch.nn as nn
 import torch.nn.functional as F
 
+"""
+超参数
+每次调整模型修改这里
+修改完成进行部署时直接将该文件复制到服务器目录
+"""
 BATCH_SIZE = 128
-EPOCH = 1161
+EPOCH = 1041
 NNet_SIZE = 30
 NNet_LEVEL = 3
 NNet_output_size = 24

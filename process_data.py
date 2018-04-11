@@ -144,18 +144,35 @@ normalize_scaler = preprocessing.MinMaxScaler()
 normalize_scale_collect = []
 def normalize(data):
     normalize_scaler.fit(data)
+    scale_adjust()
     data = normalize_scaler.transform(data)
-    curr_scale = [each for each in normalize_scaler.scale_]
-    normalize_scale_collect.append(curr_scale)
+    # 记录每次的scale情况
+    # curr_scale = [each for each in normalize_scaler.scale_]
+    # normalize_scale_collect.append(curr_scale)
     return data
 
 standardize_scaler = preprocessing.StandardScaler()
-standardize_scale_collect = []
 def standardize(data):
     standardize_scaler.fit(data)
     data = standardize_scaler.transform(data)
-    standardize_scale_collect.append([each for each in standardize_scaler.scale_])
     return data
+
+def scale_adjust():
+    """
+    根据scale的情况判断是否需要进行scale
+    scale的大小是由这个数据的max - min的得出 如果相差不大 就不进行scale
+    通过修改scale和min的值使其失去scale的作用
+
+    note: scale 的大小时max - min 的倒数
+    """
+    curr_scale = normalize_scaler.scale_
+    curr_min = normalize_scaler.min_
+
+    for each_val in range(len(curr_scale)):
+        if curr_scale[each_val] > 1:
+            curr_scale[each_val] = 1
+        if abs(curr_min[each_val]) < 2:
+            curr_min[each_val] = 0
 
 
 
@@ -175,10 +192,10 @@ def print_plot(data_set, data_cap_type, data_feat_type):
             handle_lines_map[l[0]] = HandlerLine2D(numpoints=1)
             plt.pause(0.01)
         plt.legend(handler_map=handle_lines_map)
-        plt.pause(0.01)
+        plt.pause(0.008)
     plt.show()
 
-def pickle_to_file(batch_num, online_mode=False, feedback_data=None):
+def pickle_to_file(batch_num, feedback_data=None):
     """
     从采集生成的文件夹中读取数据 存为python对象
 
@@ -189,9 +206,6 @@ def pickle_to_file(batch_num, online_mode=False, feedback_data=None):
     :return: None  过程函数
     """
     data_set_file_name = 'data_set'
-    if online_mode:
-        data_set_file_name += '_short'
-
 
     try:
         file = open(DATA_DIR_PATH + '\\' + data_set_file_name, 'r+b')
@@ -220,9 +234,6 @@ def pickle_to_file(batch_num, online_mode=False, feedback_data=None):
             # 拼接特征 使其满足RNN的输入要求
             batch_list = append_feature_vector(extracted_data_set)
             for each_data_mat in batch_list:
-                if online_mode:
-                    each_data_mat = each_data_mat[1:9, :]
-
                 train_data.append((each_sign, each_data_mat))
     curr_data_set_cont = batch_num
 
@@ -273,53 +284,6 @@ def __emg_feature_extract(data_set):
         'append_all': data_trans,
     }
 
-#
-# def emg_feature_extract_single(data):
-#     data = length_adjust(data)
-#     window_amount = len(data) / EMG_WINDOW_SIZE
-#     # windows_data = data.reshape(window_amount, WINDOW_SIZE, TYPE_LEN[type_name])
-#     window_rest = len(data) % EMG_WINDOW_SIZE
-#     data_len = (len(data) - window_rest) if window_rest != 0 else len(data)
-#     windows_data = np.vsplit(data[0:data_len, :], window_amount)
-#     win_index = 0
-#     is_first = True
-#     seg_all_feat = []
-#     seg_RMS_feat = []
-#     seg_VAR_feat = []
-#
-#     for Win_Data in windows_data:
-#         # 依次处理每个window的数据
-#         win_RMS_feat = np.sqrt(np.mean(np.square(Win_Data), axis=0))
-#
-#         win_avg_value = np.sum(Win_Data, axis=0) / EMG_WINDOW_SIZE
-#         win_avg = np.array([win_avg_value for j in range(EMG_WINDOW_SIZE)])
-#
-#         diff = Win_Data - win_avg
-#         square = np.square(diff)
-#
-#         win_VAR_feat = np.mean(square, axis=0)
-#         # 将每个window特征提取的数据用vstack叠起来
-#         if win_index == 0:
-#             seg_RMS_feat = win_RMS_feat
-#             seg_VAR_feat = win_VAR_feat
-#         else:
-#             seg_RMS_feat = np.vstack((seg_RMS_feat, win_RMS_feat))
-#             seg_VAR_feat = np.vstack((seg_VAR_feat, win_VAR_feat))
-#         win_index += 1
-#
-#         # 将三种特征拼接成一个长向量
-#         # 层叠 转置 遍历展开
-#         Seg_Feat = np.vstack((win_RMS_feat, win_VAR_feat))
-#         All_Seg_Feat = Seg_Feat.T.ravel()
-#
-#         if is_first:
-#             is_first = False
-#             seg_all_feat = All_Seg_Feat
-#         else:
-#             seg_all_feat = np.vstack((seg_all_feat, All_Seg_Feat))
-#
-#     return seg_RMS_feat, seg_VAR_feat, seg_all_feat
-
 
 '''
 提取一个手势的一个batch的某一信号种类的全部数据
@@ -329,7 +293,13 @@ def __emg_feature_extract(data_set):
 
 def feature_extract(data_set, type_name):
     """
-    特征提取
+    特征提取 并进行必要的归一化
+
+    acc gyr数据的三种特征量纲相差不大 且有某些维度全局的值都很相近的情况
+    于是暂时去除归一化的操作 拟对只对数据变化较大，且变化范围较大于1的数据维度进行部分归一化
+
+    emg数据照常进行各种处理
+
     :param data_set: 来自Load_From_File过程的返回值 一个dict
                      包含一个手语 三种采集数据类型的 多次采集过程的数据
     :param type_name: 数据采集的类型 决定nparray的长度
@@ -371,10 +341,6 @@ def feature_extract_single(data, type_name):
     win_index = 0
     is_first = True
     seg_all_feat = []
-    seg_ARC_feat = []
-    seg_RMS_feat = []
-    seg_ZC_feat = []
-
     for Win_Data in windows_data:
         # 依次处理每个window的数据
         win_RMS_feat = np.sqrt(np.mean(np.square(Win_Data), axis=0))
@@ -382,32 +348,24 @@ def feature_extract_single(data, type_name):
         win_ZC_feat = np.sum(np.sign(-np.sign(Win_Data) * np.sign(Win_Data1) + 1), axis=0) - 1
         win_ARC_feat = np.apply_along_axis(ARC, 0, Win_Data)
         # 将每个window特征提取的数据用vstack叠起来
-        if win_index == 0:
-            seg_RMS_feat = win_RMS_feat
-            seg_ZC_feat = win_ZC_feat
-            seg_ARC_feat = win_ARC_feat
-        else:
-            seg_RMS_feat = np.vstack((seg_RMS_feat, win_RMS_feat))
-            seg_ZC_feat = np.vstack((seg_ZC_feat, win_ZC_feat))
-            seg_ARC_feat = np.vstack((seg_ARC_feat, win_ARC_feat))
         win_index += 1
-
         # 将三种特征拼接成一个长向量
-        # 层叠 转置 遍历展开
+        # 层叠 遍历展开
         Seg_Feat = np.vstack((win_RMS_feat, win_ZC_feat, win_ARC_feat))
         All_Seg_Feat = Seg_Feat.ravel()
-
         if is_first:
             is_first = False
             seg_all_feat = All_Seg_Feat
         else:
             seg_all_feat = np.vstack((seg_all_feat, All_Seg_Feat))
 
-    seg_ARC_feat = normalize(seg_ARC_feat)
-    seg_RMS_feat = normalize(seg_RMS_feat)
-    seg_ZC_feat = normalize(seg_ZC_feat)
     seg_all_feat = normalize(seg_all_feat)
-
+    # seg_all_feat = np.abs(seg_all_feat)
+    seg_RMS_feat = seg_all_feat[:, 0:3]
+    seg_ZC_feat = seg_all_feat[:, 3:6]
+    seg_ARC_feat = seg_all_feat[:, 6:18]
+    seg_ARC_feat = np.hsplit(seg_ARC_feat, 4)
+    seg_ARC_feat = np.vstack(tuple(seg_ARC_feat))
     return seg_ARC_feat, seg_RMS_feat, seg_ZC_feat, seg_all_feat
 
 def ARC(Win_Data):
@@ -543,14 +501,15 @@ def print_scale(cap_type, scale_feat_name):
     fig.add_subplot(111, title='%s %s scales' % (cap_type, scale_feat_name))
 
     # 设置batch的range
-    batch_range = list(range(8, 9))
-    # batch_range.extend(list(range(40, 75)))
+    batch_range = list(range(1, 20))
+    batch_range.extend(list(range(40, 75)))
 
     # 扫描各个batch的各个手语
     for batch_id in batch_range:  # batch id range
-        for sign_id in range(1, 2):  # sign id 或者是 batch id 的 range
+        for sign_id in range(1, 25):  # sign id 或者是 batch id 的 range
             if sign_id == 14:
                 continue
+
             # scale_list = []
             data_set = load_data(sign_id=sign_id, batch_num=batch_id)  # 循环从采集文件获取数据
             feature_extract(data_set, cap_type)
@@ -570,24 +529,24 @@ def print_scale(cap_type, scale_feat_name):
             # plt.scatter(np.array(range(len(scale_list))), scale_list, marker='.')
 
         # 输出每个手语的scale
-        for each in scale_list:
-            plt.scatter(np.array(range(len(each))), each, marker='.')
+        # for each in scale_list:
+        #     plt.scatter(np.array(range(len(each))), each, marker='.')
 
         # 一个手语一个散点图
         # fig = plt.figure()
         # fig.add_subplot(111, title='sign id: %d %s scales' % (i, scale_feat_name))
 
     # 计算所有手语的scale 平均值 和 中位数
-    # scale_list_mean = np.mean(scale_list, axis=0)
-    # scale_list_median = np.median(scale_list, axis=0)
+    scale_list_mean = np.mean(scale_list, axis=0)
+    scale_list_median = np.median(scale_list, axis=0)
 
     # 将scale存入文件
-    # file_ = open('./scale_mean', 'w+b')
-    # pickle.dump(scale_list_mean,file_, protocol=2)
-    # file_.close()
-    # file_ = open('./scale_median', 'w+b')
-    # pickle.dump(scale_list_median, file_, protocol=2)
-    # file_.close()
+    file_ = open(DATA_DIR_PATH + '\\scale_mean', 'w+b')
+    pickle.dump(scale_list_mean, file_, protocol=2)
+    file_.close()
+    file_ = open(DATA_DIR_PATH + '\\scale_median', 'w+b')
+    pickle.dump(scale_list_median, file_, protocol=2)
+    file_.close()
 
     # 绘制出scale平均值和中位数
     # fig = plt.figure()
@@ -598,7 +557,7 @@ def print_scale(cap_type, scale_feat_name):
     # fig_.add_subplot(111, title='median scale')
     # plt.scatter(np.array(range(len(scale_list_median))), scale_list_median, marker='.', )
 
-    plt.show()
+    # plt.show()
 
 def print_data_plot(sign_id, batch_num, data_cap_type, data_feat_type):
     data_set = load_data(sign_id=sign_id, batch_num=batch_num)  # 从采集文件获取数据
@@ -609,16 +568,16 @@ def main():
     # 从feedback文件获取数据
     # data_set = load_from_file_feed_back()[sign_id]
 
-    # print_data_plot(sign_id=1,
-    #                 batch_num=2,
-    #                 data_cap_type='emg',  # 数据特征类型 zc rms arc trans(emg)
-    #                 data_feat_type='trans')  # 数据采集类型 emg acc gyr
+    print_data_plot(sign_id=10,
+                    batch_num=24,
+                    data_cap_type='gyr',  # 数据特征类型 zc rms arc trans(emg)
+                    data_feat_type='arc')  # 数据采集类型 emg acc gyr
 
     # print_scale('acc', 'all')
     #
     # 将采集数据转换为训练数据
     # pickle_to_file(batch_num=91, online_mode=True)
-    pickle_to_file(batch_num=91, online_mode=False)
+    # pickle_to_file(batch_num=91)
 
 if __name__ == "__main__":
     main()
