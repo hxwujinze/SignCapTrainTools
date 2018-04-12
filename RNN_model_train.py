@@ -41,7 +41,7 @@ except IndexError:
 
 random.shuffle(raw_data)
 
-SHORT_INPUT = False
+SHORT_INPUT = True
 
 # process data
 data_input, data_label = [], []

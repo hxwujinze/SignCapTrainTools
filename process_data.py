@@ -568,16 +568,15 @@ def main():
     # 从feedback文件获取数据
     # data_set = load_from_file_feed_back()[sign_id]
 
-    print_data_plot(sign_id=10,
-                    batch_num=24,
-                    data_cap_type='gyr',  # 数据特征类型 zc rms arc trans(emg)
-                    data_feat_type='arc')  # 数据采集类型 emg acc gyr
+    # print_data_plot(sign_id=10,
+    #                 batch_num=24,
+    #                 data_cap_type='gyr',  # 数据特征类型 zc rms arc trans(emg)
+    #                 data_feat_type='arc')  # 数据采集类型 emg acc gyr
 
     # print_scale('acc', 'all')
     #
-    # 将采集数据转换为训练数据
-    # pickle_to_file(batch_num=91, online_mode=True)
-    # pickle_to_file(batch_num=91)
+    # 将采集数据转换为训练数据格式
+    pickle_to_file(batch_num=91)
 
 if __name__ == "__main__":
     main()
