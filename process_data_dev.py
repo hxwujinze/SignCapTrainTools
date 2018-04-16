@@ -9,9 +9,9 @@ import numpy as np
 from matplotlib import font_manager
 from matplotlib.legend_handler import HandlerLine2D
 
-from .process_data import feature_extract_single, feature_extract, TYPE_LEN, \
+from process_data import feature_extract_single, feature_extract, TYPE_LEN, \
     append_single_data_feature, get_feat_norm_scales, append_feature_vector, \
-    normalize_scale_collect
+    normalize_scale_collect, wavelet_trans, emg_wave_trans
 
 Width_EMG = 9
 Width_ACC = 3
@@ -25,13 +25,14 @@ DATA_DIR_PATH = os.getcwd() + '\\data'
 myfont = font_manager.FontProperties(fname='C:/Windows/Fonts/msyh.ttc')
 mpl.rcParams['axes.unicode_minus'] = False
 
-CAP_TYPE_LIST = ['acc', 'gyr', 'emg']  # 直接在这里修改可去除emg
+CAP_TYPE_LIST = ['acc', 'gyr', 'emg']
 # CAP_TYPE_LIST = ['acc', 'gyr', 'emg']
 GESTURES_TABLE = ['肉 ', '鸡蛋 ', '喜欢 ', '您好 ', '你 ', '什么 ', '想 ', '我 ', '很 ', '吃 ',
                   '老师 ', '发烧 ', '谢谢 ', '空手语', '大家', '支持', '我们', '创新', '医生', '交流',
                   '团队', '帮助', '聋哑人', '请', ]
 
 SIGN_COUNT = len(GESTURES_TABLE)
+
 
 # process train data
 def load_train_data(sign_id, batch_num):
@@ -53,13 +54,13 @@ def load_train_data(sign_id, batch_num):
     """
     # Load and return data
     # initialization
-    Path = DATA_DIR_PATH
+    path = DATA_DIR_PATH
     file_num = sign_id
-    file_emg = Path + '\\' + str(batch_num) + '\\Emg\\' + str(file_num) + '.txt'
+    file_emg = path + '\\' + str(batch_num) + '\\Emg\\' + str(file_num) + '.txt'
     data_emg = file2matrix(file_emg, Width_EMG)
-    file_acc = Path + '\\' + str(batch_num) + '\\Acceleration\\' + str(file_num) + '.txt'
+    file_acc = path + '\\' + str(batch_num) + '\\Acceleration\\' + str(file_num) + '.txt'
     data_acc = file2matrix(file_acc, Width_ACC)
-    file_gyr = Path + '\\' + str(batch_num) + '\\Gyroscope\\' + str(file_num) + '.txt'
+    file_gyr = path + '\\' + str(batch_num) + '\\Gyroscope\\' + str(file_num) + '.txt'
     data_gyr = file2matrix(file_gyr, Width_GYR)
 
     processed_data_emg = []
@@ -70,26 +71,26 @@ def load_train_data(sign_id, batch_num):
         capture_length_book = {}
         for i in capture_tag_list:
             capture_length_book[i] = capture_length_book.get(i, 0) + 1
-        Index = 0
+        index = 0
         capture_times = len(capture_length_book.keys())
         capture_times = capture_times if capture_times < 20 else 21
         for i in range(1, capture_times):
-            resize_data_emg = length_adjust(data_emg[Index:Index + capture_length_book[i], 0:8])
+            resize_data_emg = length_adjust(data_emg[index:index + capture_length_book[i], 0:8])
             processed_data_emg.append(resize_data_emg)  # init
             # processed_data_emg.append(standardize(resize_data_emg))
             # processed_data_emg.append(normalize(resize_data_emg))
 
-            resize_data_acc = length_adjust(data_acc[Index:Index + capture_length_book[i], :])
+            resize_data_acc = length_adjust(data_acc[index:index + capture_length_book[i], :])
             processed_data_acc.append(resize_data_acc)
             # processed_data_acc.append(standardize(resize_data_acc))
             # processed_data_acc.append(normalize(resize_data_acc))
 
-            resize_data_gyr = length_adjust(data_gyr[Index:Index + capture_length_book[i], :])
+            resize_data_gyr = length_adjust(data_gyr[index:index + capture_length_book[i], :])
             processed_data_gyr.append(resize_data_gyr)
             # processed_data_gyr.append(standardize(resize_data_gyr))
             # processed_data_gyr.append(normalize(resize_data_gyr))
 
-            Index += capture_length_book[i]
+            index += capture_length_book[i]
         print('Load done , batch num: %d, sign id: %d, ' % (batch_num, sign_id,))
 
     return {
@@ -97,6 +98,7 @@ def load_train_data(sign_id, batch_num):
         'acc': processed_data_acc,
         'gyr': processed_data_gyr,
     }
+
 
 def file2matrix(filename, data_col_num):
     del_sign = '()[]'
@@ -119,31 +121,47 @@ def file2matrix(filename, data_col_num):
         index += 1
     return return_matrix
 
-def length_adjust(A):
-    tail_len = len(A) - LENGTH
+def length_adjust(data):
+    tail_len = len(data) - LENGTH
     if tail_len < 0:
         print('Length Error')
-        A1 = A
+        adjusted_data = data
     else:
         # 前后各去掉多出来长度的一半
-        End = len(A) - tail_len / 2
-        Begin = tail_len / 2
-        A1 = A[int(Begin):int(End), :]
-    return A1
+        end = len(data) - tail_len / 2
+        begin = tail_len / 2
+        adjusted_data = data[int(begin):int(end), :]
+    return adjusted_data
+
 
 def trans_data_to_time_seqs(data_set):
     return data_set.T
 
-def pickle_train_data(batch_num, feedback_data=None):
+def expand_emg_data(data):
+    expnded = []
+    for each_data in data:
+        each_data_expand = expand_emg_data_single(each_data)
+        expnded.append(np.array(each_data_expand))
+    return expnded
+
+def expand_emg_data_single(data):
+    each_data_expand = []
+    for each_dot in range(len(data)):
+        for time in range(16):
+            each_data_expand.append(data[each_dot][:])
+    return each_data_expand
+
+def pickle_train_data(batch_num, model_type, feedback_data=None):
     """
     从采集生成的文件夹中读取数据 存为python对象
 
     采用追加的方式 当采集文件夹数大于当前数据对象batch最大值时 进行数据的追加
     :param batch_num: 当前需要提取的采集数据文件夹数
+    :param model_type
     :param feedback_data 是否将之前feedback数据纳入训练集
     :return: None  过程函数
     """
-    data_set_file_name = 'data_set'
+    data_set_file_name = 'data_set' + model_type
 
     try:
         file = open(DATA_DIR_PATH + '\\' + data_set_file_name, 'r+b')
@@ -164,15 +182,28 @@ def pickle_train_data(batch_num, feedback_data=None):
         for each_sign in range(1, len(GESTURES_TABLE) + 1):
             # 一个手势一个手势的读入数据
             raw_data_set = load_train_data(batch_num=each_batch, sign_id=each_sign)
+
             extracted_data_set = []
+            if model_type == 'rnn':
             # 根据数据采集种类 提取特征
             for each_cap_type in CAP_TYPE_LIST:
                 extracted_data_set.append(feature_extract(raw_data_set, each_cap_type)['append_all'])
-
             # 拼接特征 使其满足RNN的输入要求
+
+            if model_type == 'cnn_raw':
+                emg_data = raw_data_set['emg']
+                for each in range(len(emg_data)):
+                    emg_data[each] = emg_data[each][:, :]
+                emg_data = emg_wave_trans(emg_data)
+                emg_data = expand_emg_data(emg_data)
+                extracted_data_set = [raw_data_set['acc'],
+                                      raw_data_set['gyr'],
+                                      emg_data]
+
             batch_list = append_feature_vector(extracted_data_set)
             for each_data_mat in batch_list:
                 train_data.append((each_sign, each_data_mat))
+
     curr_data_set_cont = batch_num
 
     if feedback_data is not None:
@@ -200,6 +231,7 @@ def pickle_train_data(batch_num, feedback_data=None):
     pickle.dump(train_data, file)
     file.close()
 
+
 """
 raw capture data: {
     'acc': 采集时acc的buffer 连续的2维数组 
@@ -220,6 +252,7 @@ processed data:[
 
 """
 
+
 # load data from online..
 def load_feed_back_data():
     """
@@ -238,6 +271,7 @@ def load_feed_back_data():
     for each_cap in feedback_data_set:
         data_set[each_cap[0]] = each_cap[1]
     return data_set
+
 
 def load_online_processed_data():
     """
@@ -267,6 +301,7 @@ def load_online_processed_data():
     print('select online processed data:')
     index_ = int(input()) - 1
     return data_list[index_]
+
 
 def load_raw_capture_data():
     """
@@ -303,6 +338,7 @@ def load_raw_capture_data():
     }
     return selected_data
 
+
 # process data from online
 def split_online_processed_data(online_data):
     """
@@ -314,24 +350,24 @@ def split_online_processed_data(online_data):
     """
     splited_data_list = []
     overall_data_list = {
-        'acc': [],
-        'gyr': [],
-        'emg': []
+        'acc': None,
+        'gyr': None,
+        'emg': None
     }
 
     for each_data in online_data:
         data_part = each_data['data']
-        acc_data = data_part[:, 0:18]
+        acc_data = data_part[:, 0:15]
         overall_data_list['acc'] = \
             append_overall_data(overall_data_list['acc'], acc_data)
         acc_data = split_features(acc_data)
 
-        gyr_data = data_part[:, 18:36]
+        gyr_data = data_part[:, 15:30]
         overall_data_list['gyr'] = \
             append_overall_data(overall_data_list['gyr'], gyr_data)
         gyr_data = split_features(gyr_data)
 
-        emg_data = data_part[:, 36:]
+        emg_data = data_part[:, 30:]
         overall_data_list['emg'] = \
             append_overall_data(overall_data_list['emg'], emg_data)
         emg_data = {
@@ -348,9 +384,11 @@ def split_online_processed_data(online_data):
         split_features(overall_data_list['acc'])
     overall_data_list['gyr'] = \
         split_features(overall_data_list['gyr'])
-    overall_data_list['emg'] = \
-        [overall_data_list['emg']]
+    overall_data_list['emg'] = {
+        'trans': [overall_data_list['emg']]
+    }
     return splited_data_list, overall_data_list
+
 
 def append_overall_data(curr_data, next_data):
     """
@@ -359,44 +397,54 @@ def append_overall_data(curr_data, next_data):
     :param next_data: 下一个读入的数据
     :return: 拼接完成的数据
     """
-    if type(curr_data) == type([]):
+    if curr_data is None:
         curr_data = next_data
     else:
         # 只取最后一个数据点追加在后面
         curr_data = np.vstack((curr_data, next_data[-1, :]))
     return curr_data
 
+
 def split_features(data):
-    RMS_feat = data[:, :3]
-    ZC_feat = data[:, 3:6]
-    ARC_feat = data[:, 6:18]
+    rms_feat = data[:, :3]
+    zc_feat = data[:, 3:6]
+    arc_feat = data[:, 6:18]
     return {
-        'rms': [RMS_feat],
-        'zc': [ZC_feat],
-        'arc': [ARC_feat]
+        'rms': [rms_feat],
+        'zc': [zc_feat],
+        'arc': [arc_feat]
     }
 
-def process_raw_capture_data(selected_data):
+def process_raw_capture_data(selected_data, for_cnn_test=False):
     """
     对raw capture data进行特征提取等处理 就像在进行识别前对数据进行处理一样
     将raw capture data直接转换成直接输入算法识别进程的data block
     用于对识别时对输入数据处理情况的还原和模拟 便与调参
     :param selected_data: 选择的raw capture data ，load_raw_capture_data()的直接输出
+    :param for_cnn_test
     :return: 返回格式与recognized history data 相同格式的数据
     """
     start_ptr = 0
     end_ptr = 128
     processed_data = []
     while end_ptr < len(selected_data['acc']):
-        acc_feat = feature_extract_single(selected_data['acc'][start_ptr:end_ptr, :], 'acc')
-        gyr_feat = feature_extract_single(selected_data['gyr'][start_ptr:end_ptr, :], 'gyr')
-        emg_feat = feature_extract_single(selected_data['emg'][start_ptr:end_ptr, :], 'emg')
-        all_feat = append_single_data_feature(acc_feat[3], gyr_feat[3], emg_feat[3])
+        if not for_cnn_test:
+            acc_feat = feature_extract_single(selected_data['acc'][start_ptr:end_ptr, :], 'acc')
+            gyr_feat = feature_extract_single(selected_data['gyr'][start_ptr:end_ptr, :], 'gyr')
+            emg_feat = wavelet_trans(selected_data['emg'][start_ptr:end_ptr, :])
+            all_feat = append_single_data_feature(acc_feat[3], gyr_feat[3], emg_feat)
+        else:
+            acc_feat = selected_data['acc'][start_ptr:end_ptr, :]
+            gyr_feat = selected_data['gyr'][start_ptr:end_ptr, :]
+            emg_feat = wavelet_trans(selected_data['emg'][start_ptr:end_ptr, :])
+            emg_feat = expand_emg_data_single(emg_feat)
+            all_feat = append_single_data_feature(acc_feat, gyr_feat, emg_feat)
+
         processed_data.append({
             'data': all_feat
         })
-        start_ptr += 16
-        end_ptr += 16
+        start_ptr += 32
+        end_ptr += 32
     return processed_data
 
 # plot output
@@ -410,9 +458,18 @@ def generate_plot(data_set, data_cap_type, data_feat_type):
     :param data_feat_type:
     :return:
     """
-    for dimension in range(TYPE_LEN[data_cap_type]):
+    if data_feat_type != 'arc':
+        dim_size = TYPE_LEN[data_cap_type]
+    else:
+        dim_size = 9
+    for dimension in range(dim_size):
         fig_ = plt.figure()
-        fig_.add_subplot(111, title='%s %s dim%s' % (data_feat_type, data_cap_type, str(dimension + 1)))
+        if data_feat_type != 'arc':
+            plt_title = '%s %s dim%s' % (data_feat_type, data_cap_type, str(dimension + 1))
+        else:
+            plt_title = 'arc dim %d param %d' % (dimension / 3 + 1, dimension % 3 + 1)
+
+        fig_.add_subplot(111, title=plt_title)
         capture_times = len(data_set[data_feat_type])
         capture_times = capture_times if capture_times < 20 else 20
         # 最多只绘制十次采集的数据 （太多了会看不清）
@@ -421,8 +478,8 @@ def generate_plot(data_set, data_cap_type, data_feat_type):
         for capture_num in range(0, capture_times):
             single_capture_data = trans_data_to_time_seqs(data_set[data_feat_type][capture_num])
             data = single_capture_data[dimension]
-            l = plt.plot(range(len(data)), data, '.-', label='cap %d' % capture_num, )
-            handle_lines_map[l[0]] = HandlerLine2D(numpoints=1)
+            plot = plt.plot(range(len(data)), data, '.-', label='cap %d' % capture_num, )
+            handle_lines_map[plot[0]] = HandlerLine2D(numpoints=1)
             plt.pause(0.008)
         plt.legend(handler_map=handle_lines_map)
 
@@ -545,36 +602,58 @@ def print_processed_online_data(data, cap_type, feat_type, block_cnt=0, overall=
         generate_plot(data_overall[cap_type], cap_type, feat_type)
     plt.show()
 
+def cnn_recognize_test(online_data):
+    from CNN_model import RawInputCNN, get_max_index
+    import torch
+    from torch.autograd import Variable
+    cnn = RawInputCNN()
+    cnn.double()
+    cnn.eval()
+    cnn.cpu()
+
+    cnn.load_state_dict(torch.load(DATA_DIR_PATH + '\\raw_input_cnn_model04-16,18-58.pkl'))
+    for each in online_data:
+        x = np.array([each['data'].T])
+        x = torch.from_numpy(x).double()
+        x = Variable(x)
+
+        y = cnn(x)
+        print(get_max_index(y))
+
+
 def main():
     # 从feedback文件获取数据
     # data_set = load_feed_back_data()[sign_id]
 
     # print_train_data(sign_id=4,
     #                       batch_num=10,
-    #                       data_cap_type='emg',  # 数据特征类型 zc rms arc trans(emg)
-    #                       data_feat_type='trans')  # 数据采集类型 emg acc gyr
+    #                       data_cap_type='acc',  # 数据特征类型 zc rms arc trans(emg)
+    #                       data_feat_type='raw')  # 数据采集类型 emg acc gyr
 
     # 输出上次处理过的数据的scale
     # print_scale('acc', 'all')
 
     # 将采集数据转换为输入训练程序的数据格式
-    # pickle_train_data(batch_num=91)
+    pickle_train_data(batch_num=91, model_type='cnn_raw')
+
+
+
+    # 从recognized data history中取得数据
+    # online_data = load_online_processed_data()
+
+    # 从 raw data history中获得data
+    # online_data = process_raw_capture_data(load_raw_capture_data(), for_cnn_test=True)
 
     # plot 原始采集的数据
     # print_raw_capture_data()
 
-    # 从recognized data history中取得数据
-    online_data = load_online_processed_data()
-
-    # 从 raw data history中获得data
-    # online_data = process_raw_capture_data(load_raw_capture_data())
-
-    # tuple(data_single, data_overall)
-    processed_data = split_online_processed_data(online_data)
-    print_processed_online_data(processed_data,
-                                cap_type='acc',
-                                feat_type='rms',
-                                overall=True)
+    #
+    # online data is a tuple(data_single, data_overall)
+    # processed_data = split_online_processed_data(online_data)
+    # print_processed_online_data(processed_data,
+    #                             cap_type='emg',
+    #                             feat_type='trans',
+    #                             overall=True)
 
 if __name__ == "__main__":
     main()

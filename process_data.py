@@ -63,8 +63,6 @@ def feature_extract(data_set, type_name):
     }
 
 def feature_extract_single(data, type_name):
-    if len(data) != 160 or len(data) != 128:
-        raise Exception('data len not satisfy')
     window_amount = len(data) / WINDOW_SIZE
     # windows_data = data.reshape(window_amount, WINDOW_SIZE, TYPE_LEN[type_name])
     windows_data = np.vsplit(data, window_amount)
@@ -83,6 +81,7 @@ def feature_extract_single(data, type_name):
         # 层叠 遍历展开
         Seg_Feat = np.vstack((win_RMS_feat, win_ZC_feat, win_ARC_feat))
         All_Seg_Feat = Seg_Feat.ravel()
+        # (x_rms, y_rms, z_rms, x_zc, y_zc, z_zc, x_a, y_a, z_a, x_b, y_b, y_c, z_a, z_b, z_c)
         if is_first:
             is_first = False
             seg_all_feat = All_Seg_Feat
@@ -93,15 +92,18 @@ def feature_extract_single(data, type_name):
     # seg_all_feat = np.abs(seg_all_feat)
     seg_RMS_feat = seg_all_feat[:, 0:3]
     seg_ZC_feat = seg_all_feat[:, 3:6]
-    seg_ARC_feat = seg_all_feat[:, 6:18]
-    seg_ARC_feat = np.hsplit(seg_ARC_feat, 4)
+    seg_ARC_feat = seg_all_feat[:, 6:]
+    try:
+        seg_ARC_feat = np.hsplit(seg_ARC_feat, 3)
+    except ValueError:
+        print(seg_ARC_feat)
     seg_ARC_feat = np.vstack(tuple(seg_ARC_feat))
     return seg_ARC_feat, seg_RMS_feat, seg_ZC_feat, seg_all_feat
 
 def ARC(Win_Data):
     Len_Data = len(Win_Data)
     # AR_coefficient = []
-    AR_coefficient = np.polyfit(range(Len_Data), Win_Data, 3)
+    AR_coefficient = np.polyfit(range(Len_Data), Win_Data, 2)
     return AR_coefficient
 
 def append_feature_vector(data_set):
@@ -146,7 +148,6 @@ def __emg_feature_extract(data_set):
     特征提取
     :param data_set: 来自Load_From_File过程的返回值 一个dict
                      包含一个手语 三种采集数据类型的 多次采集过程的数据
-    :param type_name: 数据采集的类型 决定nparray的长度
     :return: 一个dict 包含这个数据采集类型的原始数据,3种特征提取后的数据,特征拼接后的特征向量
             仍保持多次采集的数据放在一起
     """
@@ -161,7 +162,10 @@ def __emg_feature_extract(data_set):
 def wavelet_trans(data):
     data = np.array(data).T  # 转换为 通道 - 时序
     data = pywt.threshold(data, 30, mode='hard')  # 阈值滤波
-    data = pywt.wavedec(data, wavelet='db3', level=5)  # 小波变换
+    try:
+        data = pywt.wavedec(data, wavelet='db3', level=5)  # 小波变换
+    except ValueError:
+        data = pywt.wavedec(data, wavelet='db3', level=4)
     data = np.vstack((data[0].T, np.zeros(8))).T
     # 转换为 时序-通道 追加一个零点在转换回 通道-时序
     data = pywt.threshold(data, 20, mode='hard')  # 再次阈值滤波
