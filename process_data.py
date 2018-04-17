@@ -103,7 +103,7 @@ def feature_extract_single(data, type_name):
 def ARC(Win_Data):
     Len_Data = len(Win_Data)
     # AR_coefficient = []
-    AR_coefficient = np.polyfit(range(Len_Data), Win_Data, 2)
+    AR_coefficient = np.polyfit(range(Len_Data), Win_Data, 3)
     return AR_coefficient
 
 def append_feature_vector(data_set):
@@ -204,6 +204,20 @@ def eliminate_zero_shift(data):
     zero_point = np.array(zero_point)
     data -= zero_point
     return data
+
+def expand_emg_data(data):
+    expnded = []
+    for each_data in data:
+        each_data_expand = expand_emg_data_single(each_data)
+        expnded.append(np.array(each_data_expand))
+    return expnded
+
+def expand_emg_data_single(data):
+    each_data_expand = []
+    for each_dot in range(len(data)):
+        for time in range(16):
+            each_data_expand.append(data[each_dot][:])
+    return each_data_expand
 
 # data scaling
 normalize_scaler = preprocessing.MinMaxScaler()

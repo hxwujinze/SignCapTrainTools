@@ -28,7 +28,8 @@ random.shuffle(raw_data)
 
 data_input, data_label = [], []
 for (each_label, each_data) in raw_data:
-    data_input.append(each_data.T)
+    # 需要调整长度以及转置成时序
+    data_input.append(each_data[16:144].T)
     data_label.append(each_label - 1)
 
 DATA_SET_SIZE = len(data_input)
@@ -90,7 +91,6 @@ for epoch in range(0, EPOCH):
         test_output = get_max_index(test_output)
         # softmax是14个概率的输出
         # test数据是连续的100个输入 于是输出也是一个 100 * 14 的矩阵
-        test_output = test_output.numpy()
         testLabel_ = test_label.numpy()
         right = 0
         error = 0

@@ -13,7 +13,8 @@ DATA_PATH = os.getcwd() + '\\data'
 TYPE_LIST = ['acc', 'emg', 'gyr']
 GESTURES_TABLE = ['肉 ', '鸡蛋 ', '喜欢 ', '您好 ', '你 ', '什么 ', '想 ', '我 ', '很 ', '吃 ',
                   '老师 ', '发烧 ', '谢谢 ', '空手语', '大家', '支持', '我们', '创新', '医生', '交流',
-                  '团队', '帮助', '聋哑人', '请', ]
+                  '团队', '帮助', '聋哑人', '请', '行动', '微笑', '企业家', '精神', '科技', '力量',
+                  '同理心', '志愿者', '活动', '理解']
 GESTURES_SELECTED_LIST = [0 for i in range(len(GESTURES_TABLE))]
 
 SIGN_COUNT = len(GESTURES_TABLE)
@@ -512,7 +513,7 @@ def main():
         myo_device.set_stream_emg(myo.StreamEmg.enabled)
         wrap_window = Tkinter.Tk()
         wrap_window.title('手语采集')
-        wrap_window.geometry('640x480')
+        wrap_window.geometry('640x520')
         panel = ControlPanel(wrap_window)
         capture_control = CaptureControl(myo_device, panel)
         panel.set_control(capture_control)

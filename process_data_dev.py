@@ -6,12 +6,17 @@ import pickle
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
+import torch.nn.functional as F
 from matplotlib import font_manager
 from matplotlib.legend_handler import HandlerLine2D
+from torch.autograd import Variable
 
+from CNN_model import RawInputCNN, get_max_index
 from process_data import feature_extract_single, feature_extract, TYPE_LEN, \
     append_single_data_feature, get_feat_norm_scales, append_feature_vector, \
     normalize_scale_collect, wavelet_trans, emg_wave_trans
+from verify_networks import SiameseNetwork
 
 Width_EMG = 9
 Width_ACC = 3
@@ -54,7 +59,7 @@ def load_train_data(sign_id, batch_num):
     """
     # Load and return data
     # initialization
-    path = DATA_DIR_PATH
+    path = os.path.join(DATA_DIR_PATH, 'collected_data')
     file_num = sign_id
     file_emg = path + '\\' + str(batch_num) + '\\Emg\\' + str(file_num) + '.txt'
     data_emg = file2matrix(file_emg, Width_EMG)
@@ -187,8 +192,9 @@ def pickle_train_data(batch_num, model_type, feedback_data=None):
             if model_type == 'rnn':
             # 根据数据采集种类 提取特征
             for each_cap_type in CAP_TYPE_LIST:
+                # 拼接特征
+                # 使其满足RNN的输入要求
                 extracted_data_set.append(feature_extract(raw_data_set, each_cap_type)['append_all'])
-            # 拼接特征 使其满足RNN的输入要求
 
             if model_type == 'cnn_raw':
                 emg_data = raw_data_set['emg']
@@ -603,39 +609,106 @@ def print_processed_online_data(data, cap_type, feat_type, block_cnt=0, overall=
     plt.show()
 
 def cnn_recognize_test(online_data):
-    from CNN_model import RawInputCNN, get_max_index
-    import torch
-    from torch.autograd import Variable
     cnn = RawInputCNN()
     cnn.double()
     cnn.eval()
     cnn.cpu()
-
     cnn.load_state_dict(torch.load(DATA_DIR_PATH + '\\raw_input_cnn_model04-16,18-58.pkl'))
+
+    verifier = SiameseNetwork(train=False)
+    verifier.load_state_dict(torch.load(DATA_DIR_PATH + '\\verify_model04-17,18-51.pkl'))
+    verifier.double()
+    verifier.eval()
+
+    file_ = open(DATA_DIR_PATH + '\\reference_verify_vector', 'rb')
+    verify_vectors = pickle.load(file_)
+    file_.close()
+
     for each in online_data:
         x = np.array([each['data'].T])
         x = torch.from_numpy(x).double()
         x = Variable(x)
-
         y = cnn(x)
-        print(get_max_index(y))
+        predict_index = get_max_index(y)[0]
+        print('\nindex from cnn %d' % predict_index)
+        verify_vec = verifier(x)
+        reference_vec = np.array([verify_vectors[predict_index + 1]])
+        reference_vec = Variable(torch.from_numpy(reference_vec).double())
+        diff = F.pairwise_distance(verify_vec, reference_vec)
+        diff = torch.squeeze(diff).data[0]
+        print('diff %f' % diff)
 
+def generate_verify_vector():
+    """
+    根据所有训练数据生成reference vector 并保存至文件
+    :return:
+    """
+    # load data 从训练数据中获取
+    f = open(os.path.join(DATA_DIR_PATH, 'data_setcnn_raw'), 'r+b')
+    raw_data = pickle.load(f)
+    f.close()
+    try:
+        raw_data = raw_data[1].extend(raw_data[2])
+    except IndexError:
+        raw_data = raw_data[1]
+    # train_data => (batch_amount, data_set_emg)
+
+    data_orderby_class = {}
+    for (each_label, each_data) in raw_data:
+        if data_orderby_class.get(each_label) is None:
+            # 需要调整长度以及转置成时序
+            data_orderby_class[each_label] = [each_data[16:144, :].T]
+        else:
+            data_orderby_class[each_label].append(each_data[16:144, :].T)
+
+    verifier = SiameseNetwork(train=False)
+    # todo 这里设置verify model param file 的path
+    verifier.load_state_dict(torch.load(DATA_DIR_PATH + '\\verify_model04-17,18-51.pkl'))
+    verifier.double()
+    verify_vectors = {}
+    #
+    for each_sign in data_orderby_class.keys():
+        verify_vectors[each_sign] = []
+        # fig = plt.figure()
+        # fig.add_subplot(111,title='sign id %d' % each_sign)
+        for each_cap in data_orderby_class[each_sign]:
+            each_cap = torch.from_numpy(np.array([each_cap])).double()
+            each_cap = Variable(each_cap)
+            vector = verifier(each_cap)
+            vector = vector.data.float().numpy()[0]
+            verify_vectors[each_sign].append(vector)
+
+    # plt.show()
+    # fig = plt.figure()
+    # fig.add_subplot(111)
+
+    for each_sign in verify_vectors.keys():
+        verify_vector_mean = np.mean(np.array(verify_vectors[each_sign]), axis=0)
+        verify_vectors[each_sign] = verify_vector_mean
+        # plt.scatter(range(len(verify_vector_mean)), verify_vector_mean)
+        # plt.pause(0.1)
+    # plt.show()
+
+    file_ = open(DATA_DIR_PATH + '\\reference_verify_vector', 'wb')
+    pickle.dump(verify_vectors, file_)
+    file_.close()
 
 def main():
     # 从feedback文件获取数据
     # data_set = load_feed_back_data()[sign_id]
 
-    # print_train_data(sign_id=4,
-    #                       batch_num=10,
-    #                       data_cap_type='acc',  # 数据特征类型 zc rms arc trans(emg)
-    #                       data_feat_type='raw')  # 数据采集类型 emg acc gyr
+    print_train_data(sign_id=4,
+                     batch_num=10,
+                     data_cap_type='acc',  # 数据特征类型 zc rms arc trans(emg)
+                     data_feat_type='raw')  # 数据采集类型 emg acc gyr
 
     # 输出上次处理过的数据的scale
     # print_scale('acc', 'all')
 
     # 将采集数据转换为输入训练程序的数据格式
-    pickle_train_data(batch_num=91, model_type='cnn_raw')
+    # pickle_train_data(batch_num=91, model_type='cnn_raw')
 
+    # generate_verify_vector()
 
 
     # 从recognized data history中取得数据
@@ -643,6 +716,8 @@ def main():
 
     # 从 raw data history中获得data
     # online_data = process_raw_capture_data(load_raw_capture_data(), for_cnn_test=True)
+    #
+    # cnn_recognize_test(online_data)
 
     # plot 原始采集的数据
     # print_raw_capture_data()
