@@ -11,10 +11,10 @@ from torch.autograd import Variable
 
 from CNN_model import RawInputCNN, BATCH_SIZE, LEARNING_RATE, WEIGHT_DECAY, EPOCH, get_max_index
 
-DATA_DIR_PATH = os.getcwd() + '\\data'
+DATA_DIR_PATH = os.path.join(os.getcwd(), 'data')
 
 # load data
-f = open(DATA_DIR_PATH + '\\data_setcnn_raw', 'r+b')
+f = open(os.path.join(DATA_DIR_PATH, 'data_set_cnn'), 'r+b')
 raw_data = pickle.load(f)
 f.close()
 
@@ -29,7 +29,7 @@ random.shuffle(raw_data)
 data_input, data_label = [], []
 for (each_label, each_data) in raw_data:
     # 需要调整长度以及转置成时序
-    data_input.append(each_data[16:144].T)
+    data_input.append(each_data.T)
     data_label.append(each_label - 1)
 
 DATA_SET_SIZE = len(data_input)
@@ -112,4 +112,18 @@ print('cost time: %s' % cost_time)
 
 end_time = time.strftime('%m-%d,%H-%M', time.localtime(end_time_raw))
 model = cnn.cpu()
-torch.save(model.state_dict(), DATA_DIR_PATH + '\\raw_input_cnn_model%s.pkl' % end_time)
+torch.save(model.state_dict(), os.path.join(DATA_DIR_PATH, 'cnn_model%s.pkl' % end_time))
+
+file = open(os.path.join(DATA_DIR_PATH, 'cnn_models_info_%s' % end_time, 'w'))
+info = 'data_set_size:%d\n' % DATA_SET_SIZE + \
+       'input_size:%d\n' % INPUT_LEN + \
+       'batch_size:%d\n' % BATCH_SIZE + \
+       'accuracy:%.4f\n' % result + \
+       'loss: %f\n' % loss.data.float()[0] + \
+       'Epoch: %d\n' % EPOCH + \
+       'learning rate %f\n' % LEARNING_RATE + \
+       'weight_decay %f\n' % WEIGHT_DECAY
+info += str(model)
+
+file.writelines(info)
+file.close()

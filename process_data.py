@@ -20,7 +20,7 @@ TYPE_LEN = {
 
 # data process func for online
 
-def feature_extract(data_set, type_name):
+def feature_extract(data_set, type_name, for_cnn):
     """
     特征提取 并进行必要的归一化
 
@@ -32,37 +32,107 @@ def feature_extract(data_set, type_name):
     :param data_set: 来自Load_From_File过程的返回值 一个dict
                      包含一个手语 三种采集数据类型的 多次采集过程的数据
     :param type_name: 数据采集的类型 决定nparray的长度
+    :param for_cnn: 是否是为cnn模型进行特征提取 需要进行不一样的操作
     :return: 一个dict 包含这个数据采集类型的原始数据,3种特征提取后的数据,特征拼接后的特征向量
-            仍保持多次采集的数据放在一起
+            仍保持多次采集的数据的np.array放在一个list中
+            返回的数据的dict包含所有的数据 但是只有有效的字段有数据
     """
     global normalize_scale_collect
     normalize_scale_collect = []
     global standardize_scale_collect
     standardize_scale_collect = []
     if type_name == 'emg':
-        return __emg_feature_extract(data_set)
-    data_set_rms_feat = []
-    data_set_zc_feat = []
-    data_set_arc_feat = []
-    data_set_append_feat = []
+        return __emg_feature_extract(data_set, for_cnn)
+
+    data_set_rms_feat = None
+    data_set_zc_feat = None
+    data_set_arc_feat = None
+    data_set_polyfit_feat = []  # for cnn 使用多项式对间隔间的数据进行拟合 减少中间数据点
+    data_set_appended_feat = []
+
     data_set = data_set[type_name]
-    for data in data_set:
-        seg_ARC_feat, seg_RMS_feat, seg_ZC_feat, seg_all_feat \
-            = feature_extract_single(data, type_name)
-        data_set_arc_feat.append(seg_ARC_feat)
-        data_set_rms_feat.append(seg_RMS_feat)
-        data_set_zc_feat.append(seg_ZC_feat)
-        data_set_append_feat.append(seg_all_feat)
+    for raw_data in data_set:
+
+        if not for_cnn:
+            # 一般的特征提取过程
+            seg_ARC_feat, seg_RMS_feat, seg_ZC_feat, seg_polyfit_data, seg_all_feat \
+                = feature_extract_single(raw_data, type_name)
+            if data_set_arc_feat is None:
+                data_set_arc_feat = [seg_ARC_feat]
+            else:
+                data_set_arc_feat.append(seg_ARC_feat)
+
+            if data_set_rms_feat is None:
+                data_set_rms_feat = [seg_RMS_feat]
+            else:
+                data_set_rms_feat.append(seg_RMS_feat)
+
+            if data_set_zc_feat is None:
+                data_set_zc_feat = [seg_ZC_feat]
+            else:
+                data_set_zc_feat.append(seg_ZC_feat)
+            data_set_polyfit_feat.append(seg_polyfit_data)
+
+        else:
+            # cnn的特征提取过程 只使用曲线拟合特征
+            seg_polyfit_feat = feature_extract_single_polyfit(raw_data, 2)
+            data_set_polyfit_feat.append(seg_polyfit_feat)
+            seg_all_feat = seg_polyfit_feat
+
+        data_set_appended_feat.append(seg_all_feat)
+
     return {
         'type_name': type_name,
         'raw': data_set,
         'arc': data_set_arc_feat,
         'rms': data_set_rms_feat,
         'zc': data_set_zc_feat,
-        'append_all': data_set_append_feat
+        'poly_fit': data_set_polyfit_feat,
+        'append_all': data_set_appended_feat
     }
 
+def feature_extract_single_polyfit(data, compress):
+    seg_poly_fit = None
+    start_ptr = 0
+    end_ptr = 16
+    while end_ptr <= len(data):
+        window_data = data[start_ptr:end_ptr, :]
+        window_extract_data = None
+        x = np.arange(0, 16, 1)
+        y = window_data
+        # 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15
+        # 0   2   4   6   8   10    11    14
+        poly_args = np.polyfit(x, y, 3)
+        for each_channel in range(3):
+            dots_in_channel = None
+            window_poly = np.poly1d(poly_args[:, each_channel])
+            for dot in np.arange(0, 16, compress):
+                # assemble each dot's each channel
+                if dots_in_channel is None:
+                    dots_in_channel = window_poly(dot)
+                else:
+                    dots_in_channel = np.vstack((dots_in_channel, window_poly(dot)))
+            # assemble each window's each channel data
+            if window_extract_data is None:
+                window_extract_data = dots_in_channel
+            else:
+                window_extract_data = np.hstack((window_extract_data, dots_in_channel))
+
+        # assemble each window data
+        if seg_poly_fit is None:
+            seg_poly_fit = window_extract_data
+        else:
+            seg_poly_fit = np.vstack((seg_poly_fit, window_extract_data))
+        start_ptr += 16
+        end_ptr += 16
+
+    return seg_poly_fit
+
+
 def feature_extract_single(data, type_name):
+    # todo 先进行曲线拟合处理
+    # 对曲线拟合后的数据进行特征提取 效果更好
+    data = feature_extract_single_polyfit(data, 1)
     window_amount = len(data) / WINDOW_SIZE
     # windows_data = data.reshape(window_amount, WINDOW_SIZE, TYPE_LEN[type_name])
     windows_data = np.vsplit(data, window_amount)
@@ -93,12 +163,13 @@ def feature_extract_single(data, type_name):
     seg_RMS_feat = seg_all_feat[:, 0:3]
     seg_ZC_feat = seg_all_feat[:, 3:6]
     seg_ARC_feat = seg_all_feat[:, 6:]
-    try:
-        seg_ARC_feat = np.hsplit(seg_ARC_feat, 3)
-    except ValueError:
-        print(seg_ARC_feat)
-    seg_ARC_feat = np.vstack(tuple(seg_ARC_feat))
-    return seg_ARC_feat, seg_RMS_feat, seg_ZC_feat, seg_all_feat
+    # try:
+    #     seg_ARC_feat = np.hsplit(seg_ARC_feat, 4)
+    # except ValueError:
+    #     print(seg_ARC_feat)
+    # seg_ARC_feat = np.vstack(tuple(seg_ARC_feat))
+
+    return seg_ARC_feat, seg_RMS_feat, seg_ZC_feat, data, seg_all_feat
 
 def ARC(Win_Data):
     Len_Data = len(Win_Data)
@@ -140,10 +211,10 @@ def append_single_data_feature(acc_data, gyr_data, emg_data):
     return batch_mat
 
 # emg data_process
-def emg_feature_extract(data_set):
-    return __emg_feature_extract(data_set)['trans']
+def emg_feature_extract(data_set, for_cnn):
+    return __emg_feature_extract(data_set, for_cnn)['trans']
 
-def __emg_feature_extract(data_set):
+def __emg_feature_extract(data_set, for_cnn):
     """
     特征提取
     :param data_set: 来自Load_From_File过程的返回值 一个dict
@@ -151,21 +222,28 @@ def __emg_feature_extract(data_set):
     :return: 一个dict 包含这个数据采集类型的原始数据,3种特征提取后的数据,特征拼接后的特征向量
             仍保持多次采集的数据放在一起
     """
-    data_trans = emg_wave_trans(data_set['emg'])
+    if for_cnn:
+        data_set = [each[16:144, :] for each in data_set['emg']]
+    else:
+        data_set = data_set['emg']
+
+    data_trans = emg_wave_trans(data_set)
+    if for_cnn:
+        data_trans = expand_emg_data(data_trans)
     return {
         'type_name': 'emg',
-        'raw': data_set['emg'],
+        'raw': data_set,
         'trans': data_trans,
         'append_all': data_trans,
     }
 
 def wavelet_trans(data):
     data = np.array(data).T  # 转换为 通道 - 时序
-    data = pywt.threshold(data, 30, mode='hard')  # 阈值滤波
+    data = pywt.threshold(data, 25, mode='hard')  # 阈值滤波
     try:
         data = pywt.wavedec(data, wavelet='db3', level=5)  # 小波变换
     except ValueError:
-        data = pywt.wavedec(data, wavelet='db3', level=4)
+        data = pywt.wavedec(data, wavelet='db2', level=5)
     data = np.vstack((data[0].T, np.zeros(8))).T
     # 转换为 时序-通道 追加一个零点在转换回 通道-时序
     data = pywt.threshold(data, 20, mode='hard')  # 再次阈值滤波
@@ -213,11 +291,60 @@ def expand_emg_data(data):
     return expnded
 
 def expand_emg_data_single(data):
-    each_data_expand = []
+    expanded_data = None
     for each_dot in range(len(data)):
-        for time in range(16):
-            each_data_expand.append(data[each_dot][:])
-    return each_data_expand
+        if each_dot % 2 != 0:
+            continue  # 只对偶数点进行左右扩展
+        if each_dot - 1 < 0:
+            left_val = data[each_dot]
+        else:
+            left_val = data[each_dot - 1]
+
+        if each_dot + 1 >= len(data):
+            right_val = data[each_dot]
+        else:
+            right_val = data[each_dot + 1]
+
+        center_val = data[each_dot]
+        x = np.arange(0, 2, 1)
+        y = np.array([left_val, center_val])
+        left_line_args = np.polyfit(x, y, 1)
+        y = np.array([center_val, right_val])
+        right_line_args = np.polyfit(x, y, 1)
+
+        dot_expanded_data = None
+        for each_channel in range(8):
+            each_channel_dot_expanded = None
+
+            poly_left = np.poly1d(left_line_args[:, each_channel])
+            for dot in np.arange(0, 1, 1 / 8):
+                if each_channel_dot_expanded is None:
+                    each_channel_dot_expanded = np.array(poly_left(dot))
+                else:
+                    each_channel_dot_expanded = np.vstack((each_channel_dot_expanded, poly_left(dot)))
+
+            poly_right = np.poly1d(right_line_args[:, each_channel])
+            for dot in np.arange(0, 1, 1 / 8):
+                if each_channel_dot_expanded is None:
+                    each_channel_dot_expanded = np.array(poly_right(dot))
+                else:
+                    each_channel_dot_expanded = np.vstack((each_channel_dot_expanded, poly_right(dot)))
+
+            if dot_expanded_data is None:
+                dot_expanded_data = each_channel_dot_expanded
+            else:
+                dot_expanded_data = np.hstack((dot_expanded_data, each_channel_dot_expanded))
+
+        if expanded_data is None:
+            expanded_data = dot_expanded_data
+        else:
+            expanded_data = np.vstack((expanded_data, dot_expanded_data))
+
+    #  data padding
+    # expanded_data = np.vstack((expanded_data[0,:], expanded_data))
+    # expanded_data = np.vstack((expanded_data, expanded_data[-1,:]))
+
+    return expanded_data
 
 # data scaling
 normalize_scaler = preprocessing.MinMaxScaler()

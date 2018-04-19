@@ -26,10 +26,10 @@ def get_max_index(tensor):
 CUDA_AVAILABLE = torch.cuda.is_available()
 print('cuda_status: %s' % str(CUDA_AVAILABLE))
 
-DATA_DIR_PATH = os.getcwd() + '\\data'
+DATA_DIR_PATH = os.path.join(os.getcwd(), 'data')
 
 # load data
-f = open(DATA_DIR_PATH + '\\data_set', 'r+b')
+f = open(os.path.join(DATA_DIR_PATH, 'data_set_rnn'), 'r+b')
 raw_data = pickle.load(f)
 f.close()
 
@@ -42,7 +42,7 @@ except IndexError:
 
 random.shuffle(raw_data)
 
-SHORT_INPUT = True
+SHORT_INPUT = False
 
 # process data
 data_input, data_label = [], []
@@ -142,9 +142,9 @@ print('cost time: %s' % cost_time)
 
 end_time = time.strftime('%m-%d,%H-%M', time.localtime(end_time_raw))
 model = model.cpu()
-torch.save(model.state_dict(), DATA_DIR_PATH + '\\model_param%s.pkl' % end_time)
+torch.save(model.state_dict(), os.path.join(DATA_DIR_PATH, 'rnn_model%s.pkl' % end_time))
 
-file = open(DATA_DIR_PATH + '\\models_info_%s' % end_time, 'w')
+file = open(os.path.join(DATA_DIR_PATH, 'rnn_models_info_%s' % end_time), 'w')
 info = 'data_set_size:%d\n' % DATA_SET_SIZE + \
        'input_size:%d\n' % INPUT_LEN + \
        'batch_size:%d\n' % BATCH_SIZE + \
@@ -159,7 +159,6 @@ info = 'data_set_size:%d\n' % DATA_SET_SIZE + \
        'dropout %f' % DROPOUT
 
 file.writelines(info)
-
 file.close()
 # how to read? :
 # model.load_state_dict(torch.load('model_param.pkl'))

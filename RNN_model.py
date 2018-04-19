@@ -8,7 +8,7 @@ import torch.nn.functional as F
 修改完成进行部署时直接将该文件复制到服务器目录
 """
 BATCH_SIZE = 64
-EPOCH = 1041
+EPOCH = 1100
 NNet_SIZE = 30
 NNet_LEVEL = 3
 NNet_output_size = 24

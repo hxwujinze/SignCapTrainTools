@@ -1,8 +1,8 @@
 data_set_size:8944
 input_size:10
 batch_size:64
-accuracy:0.9533
-loss: 2.284991
+accuracy:0.9733
+loss: 2.247203
 NNet:3 x 30
 Epoch: 1041
 NNet output size: 24

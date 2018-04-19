@@ -236,6 +236,7 @@ class CaptureControl(object):
             while (time.time() - wait_time_start) < 1.5:
                 # 当用户存储,丢弃,暂停采集时退出等待
                 if self.capture_state != STATE_STANDBY:
+                    time.sleep(0.01)
                     break
                 if self.is_cap_store or self.is_cap_discard:
                     time.sleep(1)

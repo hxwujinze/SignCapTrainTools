@@ -10,7 +10,7 @@ class RawInputCNN(nn.Module):
     def __init__(self):
         nn.Module.__init__(self)
 
-        # input 14 x 128
+        # input 14 x 64
         self.conv1 = nn.Sequential(
             nn.BatchNorm1d(14),
             nn.Conv1d(
@@ -18,12 +18,12 @@ class RawInputCNN(nn.Module):
                 out_channels=28,
                 kernel_size=8,
                 padding=4,
-                stride=4,
+                stride=1,
             ),  # Lout=floor((Lin+2∗padding−dilation∗(kernel_size−1)−1)/stride+1)
-            # output 28 x 32
+            # output 28 x 64
             nn.ReLU(),
             nn.BatchNorm1d(28),
-            nn.MaxPool1d(kernel_size=2)  # 28 x 16
+            nn.MaxPool1d(kernel_size=4)  # 28 x 16
         )
 
         self.conv2 = nn.Sequential(
@@ -40,7 +40,9 @@ class RawInputCNN(nn.Module):
         )
 
         self.out1 = nn.Sequential(
-            nn.Linear(32 * 8, 64),
+            nn.Linear(32 * 8, 128),
+            nn.ReLU(),
+            nn.Linear(128, 64),
             nn.ReLU(),
             nn.Linear(64, 24),
             nn.Softmax(),

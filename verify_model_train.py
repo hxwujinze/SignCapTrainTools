@@ -11,11 +11,15 @@ import torch.nn.functional as F
 import torch.utils.data as Data
 from torch.autograd import Variable
 
-from verify_networks import SiameseNetwork, ContrastiveLoss, \
-    LEARNING_RATE, EPOCH, BATCH_SIZE
+from verify_model import SiameseNetwork, ContrastiveLoss, \
+    LEARNING_RATE, EPOCH, BATCH_SIZE, WEIGHT_DECAY
 
 # 输入数据是个tuple  (label, data)
 class SiameseNetworkTrainDataSet:
+    """
+    生成随机的相同或者不同的数据对进行训练
+    """
+
     def __init__(self, data):
         self.data_len = len(data)
         self.data = data
@@ -45,12 +49,12 @@ class SiameseNetworkTrainDataSet:
                np.array([0 if get_same else 1], dtype=np.float32)
 
     def __len__(self):
-        return self.data_len - 300
+        return self.data_len
 
 DATA_DIR_PATH = os.path.join(os.getcwd(), 'data')
 
 # load data
-f = open(os.path.join(DATA_DIR_PATH, 'data_setcnn_raw'), 'r+b')
+f = open(os.path.join(DATA_DIR_PATH, 'data_set_cnn'), 'r+b')
 raw_data = pickle.load(f)
 f.close()
 
@@ -63,7 +67,7 @@ except IndexError:
 random.shuffle(raw_data)
 
 for each in range(len(raw_data)):
-    raw_data[each] = (raw_data[each][0], raw_data[each][1][16:144].T)
+    raw_data[each] = (raw_data[each][0], raw_data[each][1].T)
 #     adjust data len
 
 print('data_len: %s' % len(raw_data))
@@ -108,7 +112,7 @@ model.train()
 model.cuda()
 
 loss_func = ContrastiveLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
 
 start_time_raw = time.time()
 start_time = time.strftime('%H:%M:%S', time.localtime(start_time_raw))
@@ -163,4 +167,17 @@ print('cost time: %s' % cost_time)
 end_time = time.strftime('%m-%d,%H-%M', time.localtime(end_time_raw))
 model.cpu()
 model.eval()
-torch.save(model.state_dict(), DATA_DIR_PATH + '\\verify_model%s.pkl' % end_time)
+torch.save(model.state_dict(), os.path.join(DATA_DIR_PATH, 'verify_model%s.pkl' % end_time))
+
+file = open(os.path.join(DATA_DIR_PATH, 'verify_models_info_%s' % end_time), 'w')
+info = 'batch_size:%d\n' % BATCH_SIZE + \
+       'diff:%.5f\n' % diff_arg + \
+       'same:%.5f\n' % same_arg + \
+       'loss: %f\n' % loss.data.float()[0] + \
+       'Epoch: %d\n' % EPOCH + \
+       'learning rate %f\n' % LEARNING_RATE + \
+       'weight_decay %f\n' % WEIGHT_DECAY
+info += str(model)
+
+file.writelines(info)
+file.close()
