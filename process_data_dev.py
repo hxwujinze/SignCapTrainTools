@@ -13,7 +13,7 @@ from matplotlib.legend_handler import HandlerLine2D
 from torch.autograd import Variable
 
 import process_data
-from CNN_model import RawInputCNN, get_max_index
+from CNN_model import CNN, get_max_index
 from process_data import feature_extract_single, feature_extract, TYPE_LEN, \
     append_single_data_feature, get_feat_norm_scales, append_feature_vector, \
     normalize_scale_collect, wavelet_trans
@@ -327,7 +327,7 @@ def load_raw_capture_data():
         for file_ in files:
             if file_.startswith('raw_data_history'):
                 print(str(file_id) + '. ' + file_)
-                file_ = DATA_DIR_PATH + '\\' + file_
+                file_ = history_data_path + '\\' + file_
                 file_ = open(file_, 'rb')
                 data = pickle.load(file_)
                 data_list.append(data)
@@ -475,6 +475,8 @@ def process_raw_capture_data(selected_data, window_step, for_cnn=False):
             gyr_feat = selected_data['gyr'][start_ptr:end_ptr, :]
             # gyr_feat = normalize(gyr_feat)
 
+            acc_feat = process_data.feature_extract_single_polyfit(acc_feat, 2)
+            gyr_feat = process_data.feature_extract_single_polyfit(gyr_feat, 2)
             emg_feat = wavelet_trans(selected_data['emg'][start_ptr:end_ptr, :])
             # 滤波后伸展
             emg_feat = process_data.expand_emg_data_single(emg_feat)
@@ -517,6 +519,8 @@ def generate_plot(data_set, data_cap_type, data_feat_type):
         # 最多只绘制十次采集的数据 （太多了会看不清）
 
         handle_lines_map = {}
+
+        capture_times = 6
         for capture_num in range(0, capture_times):
             single_capture_data = trans_data_to_time_seqs(data_set[data_feat_type][capture_num])
             data = single_capture_data[dimension]
@@ -648,16 +652,16 @@ def print_processed_online_data(data, cap_type, feat_type, block_cnt=0, overall=
     plt.show()
 
 def cnn_recognize_test(online_data):
-    cnn = RawInputCNN()
+    verifier = SiameseNetwork(train=False)
+    load_model_param(verifier, 'verify_model')
+    verifier.double()
+    verifier.eval()
+
+    cnn = CNN()
     cnn.double()
     cnn.eval()
     cnn.cpu()
-    cnn.load_state_dict(torch.load(DATA_DIR_PATH + '\\raw_input_cnn_model04-16,18-58.pkl'))
-
-    verifier = SiameseNetwork(train=False)
-    verifier.load_state_dict(torch.load(DATA_DIR_PATH + '\\verify_model04-17,18-51.pkl'))
-    verifier.double()
-    verifier.eval()
+    load_model_param(cnn, 'cnn_model')
 
     file_ = open(DATA_DIR_PATH + '\\reference_verify_vector', 'rb')
     verify_vectors = pickle.load(file_)
@@ -701,8 +705,7 @@ def generate_verify_vector():
             data_orderby_class[each_label].append(each_data.T)
 
     verifier = SiameseNetwork(train=False)
-    # todo 这里设置verify model param file 的path
-    verifier.load_state_dict(torch.load(DATA_DIR_PATH + '\\verify_model04-19,21-41.pkl'))
+    load_model_param(verifier, 'verify_model')
     verifier.double()
     verify_vectors = {}
     #
@@ -732,12 +735,24 @@ def generate_verify_vector():
     pickle.dump(verify_vectors, file_)
     file_.close()
 
+def load_model_param(model, model_type_name):
+    for root, dirs, files in os.walk(DATA_DIR_PATH):
+        for file_ in files:
+            file_name_split = os.path.splitext(file_)
+            if file_name_split[1] == '.pkl' and file_name_split[0].startswith(model_type_name):
+                file_ = DATA_DIR_PATH + '\\' + file_
+                model.load_state_dict(torch.load(file_))
+                model.eval()
+                return model
+
+
+
 def main():
     # 从feedback文件获取数据
     # data_set = load_feed_back_data()[sign_id]
 
     # print_train_data(sign_id=4,
-    #                  batch_num=10,
+    #                  batch_num=7,
     #                  data_cap_type='emg',  # 数据采集类型 emg acc gyr
     #                  data_feat_type='trans',# 数据特征类型 zc rms arc trans(emg) poly_fit(cnn)
     #                  for_cnn=False)  # cnn数据是128长度  db4 4层变换 普通的则是 160 db3 5
@@ -748,8 +763,8 @@ def main():
     # 将采集数据转换为输入训练程序的数据格式
     # pickle_train_data(batch_num=91, model_type='rnn')
 
-    generate_verify_vector()
-
+    # 生成验证模型的参照系向量
+    # generate_verify_vector()
 
     # 从recognized data history中取得数据
     # online_data = load_online_processed_data()
@@ -758,9 +773,9 @@ def main():
     # print_raw_capture_data()
 
     # 从 raw data history中获得data
-    # online_data = process_raw_capture_data(load_raw_capture_data(), for_cnn=True, window_step=WINDOW_STEP)
-    #
-    # cnn_recognize_test(online_data)
+    online_data = process_raw_capture_data(load_raw_capture_data(), for_cnn=True, window_step=WINDOW_STEP)
+
+    cnn_recognize_test(online_data)
 
     # online data is a tuple(data_single, data_overall)
     # processed_data = split_online_processed_data(online_data)

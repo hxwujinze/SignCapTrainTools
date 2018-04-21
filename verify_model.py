@@ -7,7 +7,7 @@ import torch.nn.functional as F
 # CNN: input len -> output len
 # Lout=floor((Lin+2∗padding−dilation∗(kernel_size−1)−1)/stride+1)
 
-LEARNING_RATE = 0.0005
+LEARNING_RATE = 0.0001
 WEIGHT_DECAY = 0.0000002
 EPOCH = 500
 BATCH_SIZE = 32
@@ -27,34 +27,39 @@ class SiameseNetwork(nn.Module):
         self.cnn1 = nn.Sequential(
             nn.Conv1d(  # 14 x 64
                 in_channels=14,
-                out_channels=28,
-                kernel_size=8,
-                padding=4,
-                stride=2,
-            ),  # 28 x 32
-            nn.ReLU(),
-            # todo need Norm ? yes
-            nn.BatchNorm1d(28),  # 28 x 32
-            # todo need pooling ? yes
-            nn.MaxPool1d(kernel_size=2),  # 28 x 16
-
-            nn.Conv1d(
-                in_channels=28,
-                out_channels=32,
+                out_channels=42,
                 kernel_size=4,
                 padding=2,
+                stride=1,
+            ),  # 28 x 64
+            # need Norm ?
+            # 通常插入在激活函数和C/FC层之间 对神经网络的中间参数进行normalization
+            nn.BatchNorm1d(42),  # 42 x 64
+            nn.LeakyReLU(),
+            # only one pooling
+            nn.MaxPool1d(kernel_size=2),  # 42 x 32
+
+            nn.Conv1d(
+                in_channels=42,
+                out_channels=60,
+                kernel_size=3,
+                padding=1,
                 stride=1
-            ),  # 32 x 16
-            nn.ReLU(),
-            # nn.BatchNorm1d(32),  # 32 x 16
+            ),  # 60 x 32
+            nn.BatchNorm1d(60),  # 60 x 32
+            nn.LeakyReLU(),
             # nn.MaxPool1d(kernel_size=2),  # 32 x 8
         )
 
         self.out = nn.Sequential(
-            nn.Dropout(0.25),
-            nn.Linear(32 * 17, 256),
-            nn.ReLU(),
-            nn.Linear(256, 128),
+            nn.Dropout(),
+            nn.Linear(60 * 32, 512),
+            nn.LeakyReLU(),
+            nn.Dropout(),
+            nn.Linear(512, 256),
+            nn.LeakyReLU(),
+            nn.Dropout(),
+            nn.Linear(256, 128)
         )
 
     def forward_once(self, x):
@@ -77,7 +82,6 @@ class SiameseNetwork(nn.Module):
 
 class ContrastiveLoss(torch.nn.Module):
     """
-    损失函数 用于PB
     Contrastive loss function.
     Based on: http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
     """

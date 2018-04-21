@@ -9,7 +9,7 @@ import torch.nn as nn
 import torch.utils.data as Data
 from torch.autograd import Variable
 
-from CNN_model import RawInputCNN, BATCH_SIZE, LEARNING_RATE, WEIGHT_DECAY, EPOCH, get_max_index
+from CNN_model import CNN, BATCH_SIZE, LEARNING_RATE, WEIGHT_DECAY, EPOCH, get_max_index
 
 DATA_DIR_PATH = os.path.join(os.getcwd(), 'data')
 
@@ -57,7 +57,7 @@ loader = Data.DataLoader(
     shuffle=True
 )
 
-cnn = RawInputCNN()
+cnn = CNN()
 cnn.cuda()
 cnn.train()
 
@@ -114,7 +114,7 @@ end_time = time.strftime('%m-%d,%H-%M', time.localtime(end_time_raw))
 model = cnn.cpu()
 torch.save(model.state_dict(), os.path.join(DATA_DIR_PATH, 'cnn_model%s.pkl' % end_time))
 
-file = open(os.path.join(DATA_DIR_PATH, 'cnn_models_info_%s' % end_time, 'w'))
+file = open(os.path.join(DATA_DIR_PATH, 'cnn_models_info_%s' % end_time), 'w')
 info = 'data_set_size:%d\n' % DATA_SET_SIZE + \
        'input_size:%d\n' % INPUT_LEN + \
        'batch_size:%d\n' % BATCH_SIZE + \

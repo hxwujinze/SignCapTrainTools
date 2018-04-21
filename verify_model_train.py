@@ -170,7 +170,8 @@ model.eval()
 torch.save(model.state_dict(), os.path.join(DATA_DIR_PATH, 'verify_model%s.pkl' % end_time))
 
 file = open(os.path.join(DATA_DIR_PATH, 'verify_models_info_%s' % end_time), 'w')
-info = 'batch_size:%d\n' % BATCH_SIZE + \
+info = 'data_size:%d\n' % len(siamese_data_set) + \
+       'batch_size:%d\n' % BATCH_SIZE + \
        'diff:%.5f\n' % diff_arg + \
        'same:%.5f\n' % same_arg + \
        'loss: %f\n' % loss.data.float()[0] + \
