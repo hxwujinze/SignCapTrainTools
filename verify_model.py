@@ -27,33 +27,33 @@ class SiameseNetwork(nn.Module):
         self.cnn1 = nn.Sequential(
             nn.Conv1d(  # 14 x 64
                 in_channels=14,
-                out_channels=42,
+                out_channels=32,
                 kernel_size=4,
                 padding=2,
                 stride=1,
-            ),  # 28 x 64
-            # need Norm ?
+            ),  # 32 x 64
+            # need Norm
             # 通常插入在激活函数和C/FC层之间 对神经网络的中间参数进行normalization
-            nn.BatchNorm1d(42),  # 42 x 64
+            nn.BatchNorm1d(32),  # 32 x 64
             nn.LeakyReLU(),
             # only one pooling
-            nn.MaxPool1d(kernel_size=2),  # 42 x 32
+            nn.MaxPool1d(kernel_size=2),  # 32 x 32
 
             nn.Conv1d(
-                in_channels=42,
-                out_channels=60,
+                in_channels=32,
+                out_channels=32,
                 kernel_size=3,
                 padding=1,
                 stride=1
             ),  # 60 x 32
-            nn.BatchNorm1d(60),  # 60 x 32
+            nn.BatchNorm1d(32),  # 60 x 32
             nn.LeakyReLU(),
             # nn.MaxPool1d(kernel_size=2),  # 32 x 8
         )
 
         self.out = nn.Sequential(
             nn.Dropout(),
-            nn.Linear(60 * 32, 512),
+            nn.Linear(32 * 32, 512),
             nn.LeakyReLU(),
             nn.Dropout(),
             nn.Linear(512, 256),

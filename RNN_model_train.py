@@ -157,6 +157,7 @@ info = 'data_set_size:%d\n' % DATA_SET_SIZE + \
        'learning rate %f\n' % LEARNING_RATE + \
        'weight_decay %f\n' % WEIGHT_DECAY + \
        'dropout %f' % DROPOUT
+info += str(model)
 
 file.writelines(info)
 file.close()

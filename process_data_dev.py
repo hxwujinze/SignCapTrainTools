@@ -2,6 +2,7 @@
 # py3
 import os
 import pickle
+import time
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -24,7 +25,7 @@ Width_ACC = 3
 Width_GYR = 3
 LENGTH = 160
 
-WINDOW_STEP = 8
+WINDOW_STEP = 16
 
 EMG_WINDOW_SIZE = 3
 FEATURE_LENGTH = 44
@@ -35,10 +36,9 @@ mpl.rcParams['axes.unicode_minus'] = False
 
 CAP_TYPE_LIST = ['acc', 'gyr', 'emg']
 # CAP_TYPE_LIST = ['acc', 'gyr', 'emg']
-GESTURES_TABLE = ['肉 ', '鸡蛋 ', '喜欢 ', '您好 ', '你 ', '什么 ', '想 ', '我 ', '很 ', '吃 ',
-                  '老师 ', '发烧 ', '谢谢 ', '空手语', '大家', '支持', '我们', '创新', '医生', '交流',
-                  '团队', '帮助', '聋哑人', '请', ]
-
+GESTURES_TABLE = ['肉 ', '鸡蛋 ', '喜欢 ', '您好 ', '你 ', '什么 ', '想 ', '我 ', '很 ', '吃 ',  # 0-9
+                  '老师 ', '发烧 ', '谢谢 ', '', '大家 ', '支持 ', '我们 ', '创新 ', '医生 ', '交流 ',  # 10 - 19
+                  '团队 ', '帮助 ', '聋哑人 ', '请 ']  # 20 - 23
 SIGN_COUNT = len(GESTURES_TABLE)
 
 
@@ -299,14 +299,19 @@ def load_online_processed_data():
         for file_ in files:
             if file_.startswith('history_recognized_data'):
                 print(str(file_cnt) + '. ' + file_)
-                file_ = DATA_DIR_PATH + '\\' + file_
+                file_cnt += 1
+                file_ = history_data_path + '\\' + file_
                 file_ = open(file_, 'rb')
                 data = pickle.load(file_)
                 data_list.append(data)
                 file_.close()
     print('select online processed data:')
     index_ = int(input()) - 1
-    return data_list[index_]
+    history_data = {
+        'data': data_list[index_],
+        'for_cnn': 'True'
+    }
+    return history_data
 
 
 def load_raw_capture_data():
@@ -363,42 +368,42 @@ def split_online_processed_data(online_data):
         'emg': None
     }
 
-    for each_data in online_data:
-        data_part = each_data['data']
+    data_part = online_data['data']
+    is_for_cnn = online_data['for_cnn']
+    for each_data in data_part:
         # 先对输入数据进行拆分
-        if each_data['for_cnn'] == 'False':
+        if is_for_cnn == 'False':
             # 之前的数据提取方式会对数据进行多种数据提取方式
             # 扩大了输入矩阵的特征向量宽度
-            acc_data = data_part[:, 0:15]
-            gyr_data = data_part[:, 15:30]
-            emg_data = data_part[:, 30:]
+            acc_data = each_data['data'][:, 0:15]
+            gyr_data = each_data['data'][:, 15:30]
+            emg_data = each_data['data'][:, 30:]
         else:
             # 目前cnn 的输入不进行过多的特征提取操作
-            acc_data = data_part[:, 0:3]
-            gyr_data = data_part[:, 3:6]
-            emg_data = data_part[:, 6:]
+            acc_data = each_data['data'][:, 0:3]
+            gyr_data = each_data['data'][:, 3:6]
+            emg_data = each_data['data'][:, 6:]
 
 
         overall_data_list['acc'] = \
-            append_overall_data(overall_data_list['acc'], acc_data, for_cnn=each_data['for_cnn'])
+            append_overall_data(overall_data_list['acc'], acc_data, for_cnn=is_for_cnn)
         acc_data = split_features(acc_data)
 
         overall_data_list['gyr'] = \
-            append_overall_data(overall_data_list['gyr'], gyr_data, for_cnn=each_data['for_cnn'])
+            append_overall_data(overall_data_list['gyr'], gyr_data, for_cnn=is_for_cnn)
         gyr_data = split_features(gyr_data)
 
         overall_data_list['emg'] = \
-            append_overall_data(overall_data_list['emg'], emg_data, for_cnn=each_data['for_cnn'])
+            append_overall_data(overall_data_list['emg'], emg_data, for_cnn=is_for_cnn)
         emg_data = {
             'trans': [emg_data]
         }
 
-        each_data['data'] = {
+        splited_data_list.append({
             'acc': acc_data,
             'gyr': gyr_data,
             'emg': emg_data
-        }
-        splited_data_list.append(each_data)
+        })
 
     overall_data_list['acc'] = \
         split_features(overall_data_list['acc'])
@@ -424,7 +429,7 @@ def append_overall_data(curr_data, next_data, for_cnn):
         if for_cnn == "False":
             curr_data = np.vstack((curr_data, next_data[-1, :]))
         else:
-            curr_data = np.vstack((curr_data, next_data[-WINDOW_STEP * 8:, :]))
+            curr_data = np.vstack((curr_data, next_data[-8:, :]))
 
     return curr_data
 
@@ -449,7 +454,7 @@ def split_features(data):
         'arc': [arc_feat]
     }
 
-def process_raw_capture_data(selected_data, window_step, for_cnn=False):
+def process_raw_capture_data(selected_data, for_cnn=False):
     """
     对raw capture data进行特征提取等处理 就像在进行识别前对数据进行处理一样
     将raw capture data直接转换成直接输入算法识别进程的data block
@@ -461,7 +466,10 @@ def process_raw_capture_data(selected_data, window_step, for_cnn=False):
     """
     start_ptr = 0
     end_ptr = 128
-    processed_data = []
+    processed_data = {
+        'data': [],
+        'for_cnn': str(for_cnn)
+    }
     while end_ptr < len(selected_data['acc']):
         if not for_cnn:
             acc_feat = feature_extract_single(selected_data['acc'][start_ptr:end_ptr, :], 'acc')
@@ -482,13 +490,10 @@ def process_raw_capture_data(selected_data, window_step, for_cnn=False):
             emg_feat = process_data.expand_emg_data_single(emg_feat)
             all_feat = append_single_data_feature(acc_feat, gyr_feat, emg_feat)
 
-        processed_data.append({
-            'data': all_feat,
-            'for_cnn': str(for_cnn)
-        })
+        processed_data['data'].append({'data': all_feat})
 
-        start_ptr += window_step
-        end_ptr += window_step
+        start_ptr += WINDOW_STEP
+        end_ptr += WINDOW_STEP
     return processed_data
 
 # plot output
@@ -520,7 +525,7 @@ def generate_plot(data_set, data_cap_type, data_feat_type):
 
         handle_lines_map = {}
 
-        capture_times = 6
+        # capture_times = 6
         for capture_num in range(0, capture_times):
             single_capture_data = trans_data_to_time_seqs(data_set[data_feat_type][capture_num])
             data = single_capture_data[dimension]
@@ -645,7 +650,6 @@ def print_processed_online_data(data, cap_type, feat_type, block_cnt=0, overall=
                 print(each_cap['index'])
             except KeyError:
                 print('index unknown')
-            each_cap = each_cap['data']
             generate_plot(each_cap[cap_type], cap_type, feat_type)
     else:
         generate_plot(data_overall[cap_type], cap_type, feat_type)
@@ -666,26 +670,33 @@ def cnn_recognize_test(online_data):
     file_ = open(DATA_DIR_PATH + '\\reference_verify_vector', 'rb')
     verify_vectors = pickle.load(file_)
     file_.close()
-
+    online_data = online_data['data']
     for each in online_data:
+        start_time = time.clock()
         x = np.array([each['data'].T])
         x = torch.from_numpy(x).double()
         x = Variable(x)
         y = cnn(x)
         predict_index = get_max_index(y)[0]
+        cnn_cost_time = time.clock() - start_time
+        start_time = time.clock()
         print('\nindex from cnn %d' % predict_index)
+        print('sign: %s' % GESTURES_TABLE[predict_index])
         verify_vec = verifier(x)
         reference_vec = np.array([verify_vectors[predict_index + 1]])
         reference_vec = Variable(torch.from_numpy(reference_vec).double())
         diff = F.pairwise_distance(verify_vec, reference_vec)
         diff = torch.squeeze(diff).data[0]
         print('diff %f' % diff)
+        verifier_cost_time = time.clock() - start_time
+        print('time cost : cnn %f, verify %f' % (cnn_cost_time, verifier_cost_time))
 
 def generate_verify_vector():
     """
     根据所有训练数据生成reference vector 并保存至文件
     :return:
     """
+    print('generating verify vector ...')
     # load data 从训练数据中获取
     f = open(os.path.join(DATA_DIR_PATH, 'data_set_cnn'), 'r+b')
     raw_data = pickle.load(f)
@@ -720,16 +731,18 @@ def generate_verify_vector():
             vector = vector.data.float().numpy()[0]
             verify_vectors[each_sign].append(vector)
 
-    # plt.show()
-    fig = plt.figure()
-    fig.add_subplot(111)
+    print('show image? y/n')
+    is_show = input()
+    if is_show == 'y':
+        fig = plt.figure()
+        fig.add_subplot(111)
 
-    for each_sign in verify_vectors.keys():
-        verify_vector_mean = np.mean(np.array(verify_vectors[each_sign]), axis=0)
-        verify_vectors[each_sign] = verify_vector_mean
-        plt.scatter(range(len(verify_vector_mean)), verify_vector_mean, marker='.')
-        plt.pause(0.3)
-    plt.show()
+        for each_sign in verify_vectors.keys():
+            verify_vector_mean = np.mean(np.array(verify_vectors[each_sign]), axis=0)
+            verify_vectors[each_sign] = verify_vector_mean
+            plt.scatter(range(len(verify_vector_mean)), verify_vector_mean, marker='.')
+            plt.pause(0.3)
+        plt.show()
 
     file_ = open(DATA_DIR_PATH + '\\reference_verify_vector', 'wb')
     pickle.dump(verify_vectors, file_)
@@ -751,11 +764,11 @@ def main():
     # 从feedback文件获取数据
     # data_set = load_feed_back_data()[sign_id]
 
-    # print_train_data(sign_id=4,
-    #                  batch_num=7,
-    #                  data_cap_type='emg',  # 数据采集类型 emg acc gyr
-    #                  data_feat_type='trans',# 数据特征类型 zc rms arc trans(emg) poly_fit(cnn)
-    #                  for_cnn=False)  # cnn数据是128长度  db4 4层变换 普通的则是 160 db3 5
+    # print_train_data(sign_id=19,
+    #                  batch_num=74,
+    #                  data_cap_type='acc',  # 数据采集类型 emg acc gyr
+    #                  data_feat_type='poly_fit',# 数据特征类型 zc rms arc trans(emg) poly_fit(cnn)
+    #                  for_cnn=True)  # cnn数据是128长度  db4 4层变换 普通的则是 160 db3 5
 
     # 输出上次处理过的数据的scale
     # print_scale('acc', 'all')
@@ -773,17 +786,17 @@ def main():
     # print_raw_capture_data()
 
     # 从 raw data history中获得data
-    online_data = process_raw_capture_data(load_raw_capture_data(), for_cnn=True, window_step=WINDOW_STEP)
+    online_data = process_raw_capture_data(load_raw_capture_data(), for_cnn=True)
 
     cnn_recognize_test(online_data)
 
     # online data is a tuple(data_single, data_overall)
-    # processed_data = split_online_processed_data(online_data)
-    # print_processed_online_data(processed_data,
-    #                             cap_type='emg',
-    #                             feat_type='trans', # arc zc rms trans  cnn_raw cnn的输入
-    #                             overall=False,
-    #                             block_cnt=6)
+    processed_data = split_online_processed_data(online_data)
+    print_processed_online_data(processed_data,
+                                cap_type='acc',
+                                feat_type='cnn_raw',  # arc zc rms trans  cnn_raw cnn的输入
+                                overall=False,
+                                block_cnt=6)
 
 
 if __name__ == "__main__":

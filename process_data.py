@@ -239,14 +239,14 @@ def __emg_feature_extract(data_set, for_cnn):
 
 def wavelet_trans(data):
     data = np.array(data).T  # 转换为 通道 - 时序
-    data = pywt.threshold(data, 18)  # 阈值滤波
+    data = pywt.threshold(data, 18, 'hard')  # 阈值滤波
     try:
         data = pywt.wavedec(data, wavelet='db3', level=5)  # 小波变换
     except ValueError:
         data = pywt.wavedec(data, wavelet='db2', level=5)
     data = np.vstack((data[0].T, np.zeros(8))).T
     # 转换为 时序-通道 追加一个零点在转换回 通道-时序
-    data = pywt.threshold(data, 12)  # 再次阈值滤波
+    data = pywt.threshold(data, 12, 'hard')  # 再次阈值滤波
     data = data.T
     data = normalize(data)  # 转换为 时序-通道 以时序轴 对每个通道进行normalize
     data = eliminate_zero_shift(data)  # 消除零点漂移
