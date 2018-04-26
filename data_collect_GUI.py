@@ -9,7 +9,7 @@ import myo
 from Tkinter import TOP, LEFT, END
 from myo import VibrationType
 
-DATA_PATH = os.getcwd() + '\\data'
+DATA_PATH = os.getcwd() + '\\data\\collected_data'
 TYPE_LIST = ['acc', 'emg', 'gyr']
 GESTURES_TABLE = ['肉 ', '鸡蛋 ', '喜欢 ', '您好 ', '你 ', '什么 ', '想 ', '我 ', '很 ', '吃 ',
                   '老师 ', '发烧 ', '谢谢 ', '空手语', '大家', '支持', '我们', '创新', '医生', '交流',
@@ -235,11 +235,12 @@ class CaptureControl(object):
             # 等待用户1.5s
             while (time.time() - wait_time_start) < 1.5:
                 # 当用户存储,丢弃,暂停采集时退出等待
+                time.sleep(0.08)
                 if self.capture_state != STATE_STANDBY:
-                    time.sleep(0.01)
+                    time.sleep(0.1)
                     break
                 if self.is_cap_store or self.is_cap_discard:
-                    time.sleep(1)
+                    time.sleep(1)  # 选择删除或者保存后 等待1s 然后继续进行采集
                     break
             # 如果用户在等待时间什么都没做 帮用户存储
             if not self.is_cap_store and not self.is_cap_discard \
@@ -520,6 +521,7 @@ def main():
         panel.set_control(capture_control)
 
         t = CaptureThread(capture_control)
+        t.setDaemon(False)
         t.start()
 
         wrap_window.mainloop()

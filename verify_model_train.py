@@ -118,7 +118,7 @@ start_time_raw = time.time()
 start_time = time.strftime('%H:%M:%S', time.localtime(start_time_raw))
 print('start_at: %s' % start_time)
 
-for epoch in range(EPOCH):
+for epoch in range(EPOCH + 1):
     for x1, x2, label in data_loader:
         x1 = Variable(x1).float().cuda()
         x2 = Variable(x2).float().cuda()
@@ -153,8 +153,8 @@ for epoch in range(EPOCH):
         same_arg = np.mean(same_arg, axis=-1)
         diff_arg = np.mean(diff_arg, axis=-1)
         print("****************************")
-        print('epoch %d\ndiff: %.5f\nsame: %.5f\nloss: %.6f' %
-              (epoch, diff_arg, same_arg, loss.data.float()[0]))
+        print('epoch %d\ndiff: %.5f\nsame: %.5f\nloss: %.6f\nprogress: %.2f' %
+              (epoch, diff_arg, same_arg, loss.data.float()[0], 100 * epoch / EPOCH))
 
 end_time_raw = time.time()
 end_time = time.strftime('%H:%M:%S', time.localtime(end_time_raw))

@@ -17,7 +17,7 @@ import process_data
 from CNN_model import CNN, get_max_index
 from process_data import feature_extract_single, feature_extract, TYPE_LEN, \
     append_single_data_feature, get_feat_norm_scales, append_feature_vector, \
-    normalize_scale_collect, wavelet_trans
+    normalize_scale_collect, wavelet_trans, normalize
 from verify_model import SiameseNetwork
 
 Width_EMG = 9
@@ -454,43 +454,81 @@ def split_features(data):
         'arc': [arc_feat]
     }
 
-def process_raw_capture_data(selected_data, for_cnn=False):
+def process_raw_capture_data(raw_data, for_cnn=False):
     """
     对raw capture data进行特征提取等处理 就像在进行识别前对数据进行处理一样
     将raw capture data直接转换成直接输入算法识别进程的data block
     用于对识别时对输入数据处理情况的还原和模拟 便与调参
-    :param selected_data: 选择的raw capture data ，load_raw_capture_data()的直接输出
-    :param window_step 扫描窗口的步进长度
+
+
+    加入了拓展归一化的功能  对288 窗口的数据进行归一化
+    然后再以128的窗口特征提取
+
+    :param raw_data: 选择的raw capture data ，load_raw_capture_data()的直接输出
     :param for_cnn
     :return: 返回格式与recognized history data 相同格式的数据
     """
+
+    normalized_ptr_start = 0
+    normalized_ptr_end = 400  # (288 - 128 )  = 160
+    feat_extract_ptr_start = 0
+    feat_extract_ptr_end = 128
+
+    normalized_data = {
+        'acc': None,
+        'gyr': None,
+        'emg': None,
+    }
+
+
     start_ptr = 0
-    end_ptr = 128
+    end_ptr = 400
     processed_data = {
         'data': [],
         'for_cnn': str(for_cnn)
     }
-    while end_ptr < len(selected_data['acc']):
+    while end_ptr < len(raw_data['acc']):
+        time.sleep(0.16)
+        print("input sector: start ptr %d, end_ptr %d" % (start_ptr, end_ptr))
         if not for_cnn:
-            acc_feat = feature_extract_single(selected_data['acc'][start_ptr:end_ptr, :], 'acc')
-            gyr_feat = feature_extract_single(selected_data['gyr'][start_ptr:end_ptr, :], 'gyr')
-            emg_feat = wavelet_trans(selected_data['emg'][start_ptr:end_ptr, :])
+            acc_feat = feature_extract_single(raw_data['acc'][start_ptr:end_ptr, :], 'acc')
+            gyr_feat = feature_extract_single(raw_data['gyr'][start_ptr:end_ptr, :], 'gyr')
+            emg_feat = wavelet_trans(raw_data['emg'][start_ptr:end_ptr, :])
             all_feat = append_single_data_feature(acc_feat[3], gyr_feat[3], emg_feat)
 
         else:
-            acc_feat = selected_data['acc'][start_ptr:end_ptr, :]
-            # acc_feat = normalize(acc_feat)   # 对每个segment进行normalize
-            gyr_feat = selected_data['gyr'][start_ptr:end_ptr, :]
-            # gyr_feat = normalize(gyr_feat)
+            if end_ptr >= normalized_ptr_end:
+                print("normalized sector: start ptr %d, end_ptr %d" % (normalized_ptr_start, normalized_ptr_end))
+                type_eumn = ['acc', 'gyr']
 
-            acc_feat = process_data.feature_extract_single_polyfit(acc_feat, 2)
-            gyr_feat = process_data.feature_extract_single_polyfit(gyr_feat, 2)
-            emg_feat = wavelet_trans(selected_data['emg'][start_ptr:end_ptr, :])
-            # 滤波后伸展
-            emg_feat = process_data.expand_emg_data_single(emg_feat)
-            all_feat = append_single_data_feature(acc_feat, gyr_feat, emg_feat)
+                for each_type in type_eumn:
+                    # todo 这里选择是否归一化
+                    tmp = normalize(raw_data[each_type][normalized_ptr_start:normalized_ptr_end, :])
+                    # tmp = raw_data[each_type][normalized_ptr_start:normalized_ptr_end, :]
+                    if normalized_data[each_type] is None:
+                        normalized_data[each_type] = tmp
+                    else:
+                        normalized_data[each_type] = np.vstack(
+                            (normalized_data[each_type], tmp[-128:, :]))
+                normalized_ptr_start += 128
+                normalized_ptr_end += 128
 
-        processed_data['data'].append({'data': all_feat})
+            if normalized_ptr_end >= feat_extract_ptr_end or normalized_ptr_end:
+                print(
+                    "feature extract sector: start ptr %d, end_ptr %d" % (feat_extract_ptr_start, feat_extract_ptr_end))
+                acc_feat = normalized_data['acc'][feat_extract_ptr_start:feat_extract_ptr_end, :]
+                gyr_feat = normalized_data['gyr'][feat_extract_ptr_start:feat_extract_ptr_end, :]
+
+                acc_feat = process_data.feature_extract_single_polyfit(acc_feat, 2)
+                gyr_feat = process_data.feature_extract_single_polyfit(gyr_feat, 2)
+                emg_feat = wavelet_trans(raw_data['emg'][feat_extract_ptr_start:feat_extract_ptr_end, :])
+                # 滤波后伸展
+                emg_feat = process_data.expand_emg_data_single(emg_feat)
+                all_feat = append_single_data_feature(acc_feat, gyr_feat, emg_feat)
+                feat_extract_ptr_end += 16
+                feat_extract_ptr_start += 16
+                processed_data['data'].append({'data': all_feat})
+
 
         start_ptr += WINDOW_STEP
         end_ptr += WINDOW_STEP
@@ -655,6 +693,7 @@ def print_processed_online_data(data, cap_type, feat_type, block_cnt=0, overall=
         generate_plot(data_overall[cap_type], cap_type, feat_type)
     plt.show()
 
+
 def cnn_recognize_test(online_data):
     verifier = SiameseNetwork(train=False)
     load_model_param(verifier, 'verify_model')
@@ -690,6 +729,7 @@ def cnn_recognize_test(online_data):
         print('diff %f' % diff)
         verifier_cost_time = time.clock() - start_time
         print('time cost : cnn %f, verify %f' % (cnn_cost_time, verifier_cost_time))
+
 
 def generate_verify_vector():
     """
@@ -737,11 +777,13 @@ def generate_verify_vector():
         fig = plt.figure()
         fig.add_subplot(111)
 
-        for each_sign in verify_vectors.keys():
-            verify_vector_mean = np.mean(np.array(verify_vectors[each_sign]), axis=0)
-            verify_vectors[each_sign] = verify_vector_mean
+    for each_sign in verify_vectors.keys():
+        verify_vector_mean = np.mean(np.array(verify_vectors[each_sign]), axis=0)
+        verify_vectors[each_sign] = verify_vector_mean
+        if is_show == 'y':
             plt.scatter(range(len(verify_vector_mean)), verify_vector_mean, marker='.')
             plt.pause(0.3)
+    if is_show == 'y':
         plt.show()
 
     file_ = open(DATA_DIR_PATH + '\\reference_verify_vector', 'wb')
@@ -764,17 +806,17 @@ def main():
     # 从feedback文件获取数据
     # data_set = load_feed_back_data()[sign_id]
 
-    # print_train_data(sign_id=19,
-    #                  batch_num=74,
+    # print_train_data(sign_id=20,
+    #                  batch_num=41,
     #                  data_cap_type='acc',  # 数据采集类型 emg acc gyr
     #                  data_feat_type='poly_fit',# 数据特征类型 zc rms arc trans(emg) poly_fit(cnn)
-    #                  for_cnn=True)  # cnn数据是128长度  db4 4层变换 普通的则是 160 db3 5
+    #                  for_cnn=False)  # cnn数据是128长度  db4 4层变换 普通的则是 160 db3 5
 
     # 输出上次处理过的数据的scale
     # print_scale('acc', 'all')
 
     # 将采集数据转换为输入训练程序的数据格式
-    # pickle_train_data(batch_num=91, model_type='rnn')
+    # pickle_train_data(batch_num=91, model_type='cnn')
 
     # 生成验证模型的参照系向量
     # generate_verify_vector()
@@ -787,15 +829,15 @@ def main():
 
     # 从 raw data history中获得data
     online_data = process_raw_capture_data(load_raw_capture_data(), for_cnn=True)
-
-    cnn_recognize_test(online_data)
+    #
+    # cnn_recognize_test(online_data)
 
     # online data is a tuple(data_single, data_overall)
     processed_data = split_online_processed_data(online_data)
     print_processed_online_data(processed_data,
                                 cap_type='acc',
                                 feat_type='cnn_raw',  # arc zc rms trans  cnn_raw cnn的输入
-                                overall=False,
+                                overall=True,
                                 block_cnt=6)
 
 

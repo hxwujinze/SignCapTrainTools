@@ -9,7 +9,7 @@ import torch.nn.functional as F
 """
 BATCH_SIZE = 64
 EPOCH = 1100
-NNet_SIZE = 30
+NNet_SIZE = 32
 NNet_LEVEL = 3
 NNet_output_size = 24
 CLASS_COUNT = 24

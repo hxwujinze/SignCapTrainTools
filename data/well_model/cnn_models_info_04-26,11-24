@@ -1,0 +1,33 @@
+data_set_size:7460
+input_size:64
+batch_size:64
+accuracy:0.9900
+loss: 2.268036
+Epoch: 1000
+learning rate 0.000100
+weight_decay 0.000000
+CNN(
+  (conv1): Sequential(
+    (0): Conv1d(14, 32, kernel_size=(4,), stride=(1,), padding=(2,))
+    (1): BatchNorm1d(32, eps=1e-05, momentum=0.1, affine=True)
+    (2): LeakyReLU(0.01)
+    (3): MaxPool1d(kernel_size=3, stride=3, padding=0, dilation=1, ceil_mode=False)
+  )
+  (conv2): Sequential(
+    (0): Conv1d(32, 40, kernel_size=(3,), stride=(1,), padding=(1,))
+    (1): BatchNorm1d(40, eps=1e-05, momentum=0.1, affine=True)
+    (2): LeakyReLU(0.01)
+    (3): MaxPool1d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False)
+  )
+  (out1): Sequential(
+    (0): Dropout(p=0.5)
+    (1): Linear(in_features=400, out_features=256, bias=True)
+    (2): LeakyReLU(0.01)
+    (3): Dropout(p=0.5)
+    (4): Linear(in_features=256, out_features=128, bias=True)
+    (5): LeakyReLU(0.01)
+    (6): Dropout(p=0.5)
+    (7): Linear(in_features=128, out_features=24, bias=True)
+    (8): Softmax()
+  )
+)

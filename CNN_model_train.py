@@ -70,7 +70,7 @@ print('start_at: %s' % start_time)
 
 # start training
 # epoch: 用所有训练数据跑一遍称为一次epoch
-for epoch in range(0, EPOCH):
+for epoch in range(EPOCH + 1):
     for batch_x, batch_y in loader:
         batch_x = Variable(batch_x).cuda()
         batch_y = Variable(batch_y).cuda()
@@ -100,7 +100,8 @@ for epoch in range(0, EPOCH):
             else:
                 error += 1
         result = right / (right + error)
-        print("\n\nepoch: %s\naccuracy: %.4f\nloss: %s" % (epoch, result, loss.data.float()[0]))
+        print("\n\nepoch: %s\naccuracy: %.4f\nloss: %s\nprogress: %.2f" %
+              (epoch, result, loss.data.float()[0], 100 * epoch / EPOCH))
 
 end_time_raw = time.time()
 end_time = time.strftime('%H:%M:%S', time.localtime(end_time_raw))

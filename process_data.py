@@ -355,8 +355,8 @@ def normalize(data):
     scale_adjust()
     data = normalize_scaler.transform(data)
     # 记录每次的scale情况
-    curr_scale = [each for each in normalize_scaler.scale_]
-    normalize_scale_collect.append(curr_scale)
+    # curr_scale = [each for each in normalize_scaler.scale_]
+    # normalize_scale_collect.append(curr_scale)
     return data
 
 def scale_adjust():
@@ -373,7 +373,6 @@ def scale_adjust():
     for each_val in range(len(curr_scale)):
         if curr_scale[each_val] > 1:
             curr_scale[each_val] = 1
-            curr_min[each_val] = 0
         # if abs(curr_min[each_val]) < 50:
         # curr_min[each_val] = 0
 
