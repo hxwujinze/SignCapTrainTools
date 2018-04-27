@@ -76,6 +76,10 @@ def feature_extract(data_set, type_name, for_cnn):
         else:
             # cnn的特征提取过程 只使用曲线拟合特征
             seg_polyfit_feat = feature_extract_single_polyfit(raw_data, 2)
+            seg_polyfit_feat = normalize_cnn(seg_polyfit_feat)
+            # todo 拟合后切割
+            seg_polyfit_feat = seg_polyfit_feat[8:-8, :]
+            # 给CNN喂128的片段短数据  拟合压缩前是
             data_set_polyfit_feat.append(seg_polyfit_feat)
             seg_all_feat = seg_polyfit_feat
 
@@ -129,8 +133,8 @@ def feature_extract_single_polyfit(data, compress):
     return seg_poly_fit
 
 
+
 def feature_extract_single(data, type_name):
-    # todo 先进行曲线拟合处理
     # 对曲线拟合后的数据进行特征提取 效果更好
     data = feature_extract_single_polyfit(data, 1)
     window_amount = len(data) / WINDOW_SIZE
@@ -149,7 +153,11 @@ def feature_extract_single(data, type_name):
         win_index += 1
         # 将三种特征拼接成一个长向量
         # 层叠 遍历展开
-        Seg_Feat = np.vstack((win_RMS_feat, win_ZC_feat, win_ARC_feat))
+
+        # todo 没有zc特征
+        # Seg_Feat = np.vstack((win_RMS_feat, win_ZC_feat, win_ARC_feat))
+        Seg_Feat = np.vstack((win_RMS_feat, win_ARC_feat))
+
         All_Seg_Feat = Seg_Feat.ravel()
         # (x_rms, y_rms, z_rms, x_zc, y_zc, z_zc, x_a, y_a, z_a, x_b, y_b, y_c, z_a, z_b, z_c)
         if is_first:
@@ -161,8 +169,12 @@ def feature_extract_single(data, type_name):
     seg_all_feat = normalize(seg_all_feat)
     # seg_all_feat = np.abs(seg_all_feat)
     seg_RMS_feat = seg_all_feat[:, 0:3]
-    seg_ZC_feat = seg_all_feat[:, 3:6]
-    seg_ARC_feat = seg_all_feat[:, 6:]
+    if len(seg_all_feat[0]) == 44:
+        seg_ZC_feat = seg_all_feat[:, 3:6]
+        seg_ARC_feat = seg_all_feat[:, 6:]
+    else:
+        seg_ARC_feat = seg_all_feat[:, 3:]
+        seg_ZC_feat = [[]]
     # try:
     #     seg_ARC_feat = np.hsplit(seg_ARC_feat, 4)
     # except ValueError:
@@ -359,6 +371,20 @@ def normalize(data):
     # normalize_scale_collect.append(curr_scale)
     return data
 
+"""
+maxmin scale = (val - min) / (max - min) 
+即数据在最大值最小值直接的比例
+scale值阈值的设置是根据 scikit MinMax的的处理方法
+scale数组中实际存储的是最大值减最小值的倒数  值越大 说明数据波动越小
+如果scale时最大最小值相差很小 则不进行min max 的缩放scale 避免放大噪声
+min 数组中存的是最小值 乘以scale 数组的值 相当于数据基准偏移量
+数据一般都有一个小偏移量 所以数据最好都进行一下偏移修正
+在不进行scale时 偏移量应还原成数据自身的偏移量 所以做之前乘法的逆运算 获取原始偏移量
+
+由于RNN CNN scale数据的特性不同 决定是否进行scale的阈值也不同 
+"""
+
+
 def scale_adjust():
     """
     根据scale的情况判断是否需要进行scale
@@ -369,12 +395,29 @@ def scale_adjust():
     """
     curr_scale = normalize_scaler.scale_
     curr_min = normalize_scaler.min_
-
     for each_val in range(len(curr_scale)):
-        if curr_scale[each_val] > 1:
+        if curr_scale[each_val] > 3:
+            curr_min[each_val] = curr_min[each_val] / curr_scale[each_val]
             curr_scale[each_val] = 1
         # if abs(curr_min[each_val]) < 50:
-        # curr_min[each_val] = 0
+        #     curr_min[each_val] = 0
+
+def normalize_cnn(data):
+    normalize_scaler.fit(data)
+    curr_scale = normalize_scaler.scale_
+    curr_min = normalize_scaler.min_
+    for each_val in range(len(curr_scale)):
+        if curr_scale[each_val] > 5:
+            curr_min[each_val] = curr_min[each_val] / curr_scale[each_val]
+            curr_scale[each_val] = 1
+
+    data = normalize_scaler.transform(data)
+    # 记录每次的scale情况
+    # curr_scale = [each for each in normalize_scaler.scale_]
+    # normalize_scale_collect.append(curr_scale)
+    return data
+
+
 
 def get_feat_norm_scales():
     # 0 ARC 1 RMS 2 ZC 3 ALL
@@ -389,5 +432,4 @@ def get_feat_norm_scales():
         feat_no = normalize_scale_collect.index(each) % 4
         scales[feat_name[feat_no]].append(each)
     return scales
-
 

@@ -17,7 +17,7 @@ import process_data
 from CNN_model import CNN, get_max_index
 from process_data import feature_extract_single, feature_extract, TYPE_LEN, \
     append_single_data_feature, get_feat_norm_scales, append_feature_vector, \
-    normalize_scale_collect, wavelet_trans, normalize
+    normalize_scale_collect, wavelet_trans, normalize_cnn
 from verify_model import SiameseNetwork
 
 Width_EMG = 9
@@ -198,8 +198,9 @@ def pickle_train_data(batch_num, model_type, feedback_data=None):
             # 一个手势一个手势的读入数据
             raw_data_set = load_train_data(batch_num=each_batch, sign_id=each_sign)
             extracted_data_set = []
-            if is_for_cnn:
-                raw_data_set = cut_out_data(raw_data_set)  # 给CNN喂128的片段短数据
+            # todo 拟合前切割
+            # if is_for_cnn:
+            #     raw_data_set = cut_out_data(raw_data_set)  # 给CNN喂128的片段短数据
 
             # 根据数据采集种类 提取特征
             for each_cap_type in CAP_TYPE_LIST:
@@ -503,7 +504,7 @@ def process_raw_capture_data(raw_data, for_cnn=False):
 
                 for each_type in type_eumn:
                     # todo 这里选择是否归一化
-                    tmp = normalize(raw_data[each_type][normalized_ptr_start:normalized_ptr_end, :])
+                    tmp = normalize_cnn(raw_data[each_type][normalized_ptr_start:normalized_ptr_end, :])
                     # tmp = raw_data[each_type][normalized_ptr_start:normalized_ptr_end, :]
                     if normalized_data[each_type] is None:
                         normalized_data[each_type] = tmp
@@ -513,7 +514,7 @@ def process_raw_capture_data(raw_data, for_cnn=False):
                 normalized_ptr_start += 128
                 normalized_ptr_end += 128
 
-            if normalized_ptr_end >= feat_extract_ptr_end or normalized_ptr_end:
+            if normalized_ptr_end >= feat_extract_ptr_end:
                 print(
                     "feature extract sector: start ptr %d, end_ptr %d" % (feat_extract_ptr_start, feat_extract_ptr_end))
                 acc_feat = normalized_data['acc'][feat_extract_ptr_start:feat_extract_ptr_end, :]
@@ -646,8 +647,11 @@ def print_train_data(sign_id, batch_num, data_cap_type, data_feat_type, for_cnn=
     :param for_cnn
     """
     data_set = load_train_data(sign_id=sign_id, batch_num=batch_num)  # 从采集文件获取数据
-    if for_cnn:
-        data_set = cut_out_data(data_set)
+
+    # todo 拟合前切割
+    # if for_cnn:
+    #     data_set = cut_out_data(data_set)
+
     data_set = feature_extract(data_set, data_cap_type, for_cnn=for_cnn)
     generate_plot(data_set, data_cap_type, data_feat_type)
     plt.show()
@@ -806,17 +810,17 @@ def main():
     # 从feedback文件获取数据
     # data_set = load_feed_back_data()[sign_id]
 
-    # print_train_data(sign_id=20,
-    #                  batch_num=41,
+    # print_train_data(sign_id=16,
+    #                  batch_num=57,
     #                  data_cap_type='acc',  # 数据采集类型 emg acc gyr
     #                  data_feat_type='poly_fit',# 数据特征类型 zc rms arc trans(emg) poly_fit(cnn)
-    #                  for_cnn=False)  # cnn数据是128长度  db4 4层变换 普通的则是 160 db3 5
+    #                  for_cnn=True)  # cnn数据是128长度  db4 4层变换 普通的则是 160 db3 5
 
     # 输出上次处理过的数据的scale
     # print_scale('acc', 'all')
 
     # 将采集数据转换为输入训练程序的数据格式
-    # pickle_train_data(batch_num=91, model_type='cnn')
+    pickle_train_data(batch_num=91, model_type='cnn')
 
     # 生成验证模型的参照系向量
     # generate_verify_vector()
@@ -827,18 +831,19 @@ def main():
     # plot 原始采集的数据
     # print_raw_capture_data()
 
-    # 从 raw data history中获得data
-    online_data = process_raw_capture_data(load_raw_capture_data(), for_cnn=True)
-    #
+    # 从 raw data history中获得data 并处理成能够直接输入到cnn的形式
+    # online_data = process_raw_capture_data(load_raw_capture_data(), for_cnn=True)
+
+    # 识别能力测试
     # cnn_recognize_test(online_data)
 
     # online data is a tuple(data_single, data_overall)
-    processed_data = split_online_processed_data(online_data)
-    print_processed_online_data(processed_data,
-                                cap_type='acc',
-                                feat_type='cnn_raw',  # arc zc rms trans  cnn_raw cnn的输入
-                                overall=True,
-                                block_cnt=6)
+    # processed_data = split_online_processed_data(online_data)
+    # print_processed_online_data(processed_data,
+    #                             cap_type='acc',
+    #                             feat_type='cnn_raw',  # arc zc rms trans  cnn_raw cnn的输入
+    #                             overall=True,
+    #                             block_cnt=6)
 
 
 if __name__ == "__main__":

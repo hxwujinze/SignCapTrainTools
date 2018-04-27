@@ -7,6 +7,7 @@ import torch.nn.functional as F
 每次调整模型修改这里
 修改完成进行部署时直接将该文件复制到服务器目录
 """
+INPUT_SIZE = 38
 BATCH_SIZE = 64
 EPOCH = 1100
 NNet_SIZE = 32
@@ -21,7 +22,7 @@ class LSTM(nn.Module):
     def __init__(self):
         super(LSTM, self).__init__()
         self.lstm = nn.LSTM(
-            input_size=44,  # feature's number
+            input_size=INPUT_SIZE,  # feature's number
             # 2*(3+3+3*4) +(8 + 8 +4*8)
             hidden_size=NNet_SIZE,  # hidden size of rnn layers
             num_layers=NNet_LEVEL,  # the number of rnn layers
