@@ -336,14 +336,18 @@ def expand_emg_data_single(data):
             each_channel_dot_expanded = None
 
             poly_left = np.poly1d(left_line_args[:, each_channel])
-            for dot in np.arange(0, 1, 1 / 8):
+            expand_range = []
+            for i in range(8):
+                expand_range.append(0.125 * i)
+
+            for dot in expand_range:
                 if each_channel_dot_expanded is None:
                     each_channel_dot_expanded = np.array(poly_left(dot))
                 else:
                     each_channel_dot_expanded = np.vstack((each_channel_dot_expanded, poly_left(dot)))
 
             poly_right = np.poly1d(right_line_args[:, each_channel])
-            for dot in np.arange(0, 1, 1 / 8):
+            for dot in expand_range:
                 if each_channel_dot_expanded is None:
                     each_channel_dot_expanded = np.array(poly_right(dot))
                 else:

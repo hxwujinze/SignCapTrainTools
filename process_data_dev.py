@@ -2,6 +2,7 @@
 # py3
 import os
 import pickle
+import random
 import time
 
 import matplotlib as mpl
@@ -17,7 +18,7 @@ import process_data
 from CNN_model import CNN, get_max_index
 from process_data import feature_extract_single, feature_extract, TYPE_LEN, \
     append_single_data_feature, get_feat_norm_scales, append_feature_vector, \
-    normalize_scale_collect, wavelet_trans, normalize
+    normalize_scale_collect, wavelet_trans
 from verify_model import SiameseNetwork
 
 Width_EMG = 9
@@ -335,7 +336,7 @@ def load_raw_capture_data():
                 print(str(file_id) + '. ' + file_)
                 file_ = history_data_path + '\\' + file_
                 file_ = open(file_, 'rb')
-                data = pickle.load(file_)
+                data = pickle.load(file_, encoding='iso-8859-1')
                 data_list.append(data)
                 file_.close()
                 file_id += 1
@@ -471,7 +472,7 @@ def process_raw_capture_data(raw_data, for_cnn=False):
     """
 
     normalized_ptr_start = 0
-    normalized_ptr_end = 400  # (288 - 128 )  = 160
+    normalized_ptr_end = 160  # (288 - 128 )  = 160
     feat_extract_ptr_start = 0
     feat_extract_ptr_end = 128
 
@@ -483,14 +484,14 @@ def process_raw_capture_data(raw_data, for_cnn=False):
 
 
     start_ptr = 0
-    end_ptr = 400
+    end_ptr = 160
     processed_data = {
         'data': [],
         'for_cnn': str(for_cnn)
     }
     while end_ptr < len(raw_data['acc']):
-        time.sleep(0.16)
-        print("input sector: start ptr %d, end_ptr %d" % (start_ptr, end_ptr))
+        # time.sleep(0.16)
+        # print("input sector: start ptr %d, end_ptr %d" % (start_ptr, end_ptr))
         if not for_cnn:
             acc_feat = feature_extract_single(raw_data['acc'][start_ptr:end_ptr, :], 'acc')
             gyr_feat = feature_extract_single(raw_data['gyr'][start_ptr:end_ptr, :], 'gyr')
@@ -499,21 +500,28 @@ def process_raw_capture_data(raw_data, for_cnn=False):
 
         else:
             if end_ptr >= normalized_ptr_end:
-                print("normalized sector: start ptr %d, end_ptr %d" % (normalized_ptr_start, normalized_ptr_end))
+                # print("normalized sector: start ptr %d, end_ptr %d" % (normalized_ptr_start, normalized_ptr_end))
                 type_eumn = ['acc', 'gyr']
 
                 for each_type in type_eumn:
                     data_seg = raw_data[each_type][normalized_ptr_start:normalized_ptr_end, :]
+
+                    if each_type == 'gyr':
+                        threshold = 20
+                        default_scale = 200
+                    else:
+                        threshold = 0.3
+                        default_scale = 2
                     # todo 这里选择是否归一化
-                    tmp = normalize(data_seg, threshold=2, default_scale=60)
-                    # tmp = raw_data[each_type][normalized_ptr_start:normalized_ptr_end, :]
+                    tmp = data_seg
+                    # tmp = normalize(data_seg, threshold, default_scale)
                     if normalized_data[each_type] is None:
                         normalized_data[each_type] = tmp
                     else:
                         normalized_data[each_type] = np.vstack(
-                            (normalized_data[each_type], tmp[-128:, :]))
-                normalized_ptr_start += 128
-                normalized_ptr_end += 128
+                            (normalized_data[each_type], tmp[-16:, :]))
+                normalized_ptr_start += 16
+                normalized_ptr_end += 16
 
             if normalized_ptr_end >= feat_extract_ptr_end:
                 print(
@@ -527,8 +535,9 @@ def process_raw_capture_data(raw_data, for_cnn=False):
                 # 滤波后伸展
                 emg_feat = process_data.expand_emg_data_single(emg_feat)
                 all_feat = append_single_data_feature(acc_feat, gyr_feat, emg_feat)
-                feat_extract_ptr_end += 16
-                feat_extract_ptr_start += 16
+                extract_step = random.randint(8, 24)
+                feat_extract_ptr_end += extract_step
+                feat_extract_ptr_start += extract_step
                 processed_data['data'].append({'data': all_feat})
 
 
@@ -811,19 +820,19 @@ def main():
     # 从feedback文件获取数据
     # data_set = load_feed_back_data()[sign_id]
 
-    print_train_data(sign_id=13,
-                     batch_num=10,
-                     data_cap_type='acc',  # 数据采集类型 emg acc gyr
-                     data_feat_type='rms',  # 数据特征类型 zc rms arc trans(emg) poly_fit(cnn)
-                     for_cnn=False)  # cnn数据是128长度  db4 4层变换 普通的则是 160 db3 5
+    # print_train_data(sign_id=13,
+    #                  batch_num=10,
+    #                  data_cap_type='acc',  # 数据采集类型 emg acc gyr
+    #                  data_feat_type='rms',  # 数据特征类型 zc rms arc trans(emg) poly_fit(cnn)
+    #                  for_cnn=False)  # cnn数据是128长度  db4 4层变换 普通的则是 160 db3 5
     #
     # 输出上次处理过的数据的scale
     # print_scale('acc', 'all')
 
     # 将采集数据转换为输入训练程序的数据格式
-    pickle_train_data(batch_num=91, model_type='cnn')
-    pickle_train_data(batch_num=91, model_type='rnn')
-
+    # pickle_train_data(batch_num=91, model_type='cnn')
+    # pickle_train_data(batch_num=91, model_type='rnn')
+    #
     # 生成验证模型的参照系向量
     # generate_verify_vector()
 
@@ -834,18 +843,18 @@ def main():
     # print_raw_capture_data()
 
     # 从 raw data history中获得data 并处理成能够直接输入到cnn的形式
-    # online_data = process_raw_capture_data(load_raw_capture_data(), for_cnn=True)
+    online_data = process_raw_capture_data(load_raw_capture_data(), for_cnn=True)
 
     # 识别能力测试
-    # cnn_recognize_test(online_data)
+    cnn_recognize_test(online_data)
 
     # online data is a tuple(data_single, data_overall)
-    # processed_data = split_online_processed_data(online_data)
-    # print_processed_online_data(processed_data,
-    #                             cap_type='acc',
-    #                             feat_type='cnn_raw',  # arc zc rms trans  cnn_raw cnn的输入
-    #                             overall=True,
-    #                             block_cnt=6)
+    processed_data = split_online_processed_data(online_data)
+    print_processed_online_data(processed_data,
+                                cap_type='acc',
+                                feat_type='cnn_raw',  # arc zc rms trans  cnn_raw cnn的输入
+                                overall=True,
+                                block_cnt=6)
 
 
 if __name__ == "__main__":
