@@ -7,7 +7,7 @@ import torch.nn.functional as F
 # CNN: input len -> output len
 # Lout=floor((Lin+2∗padding−dilation∗(kernel_size−1)−1)/stride+1)
 
-LEARNING_RATE = 0.0001
+LEARNING_RATE = 0.00015
 WEIGHT_DECAY = 0.0000002
 EPOCH = 500
 BATCH_SIZE = 32
@@ -57,9 +57,6 @@ class SiameseNetwork(nn.Module):
             nn.LeakyReLU(),
             nn.Dropout(),
             nn.Linear(512, 256),
-            nn.LeakyReLU(),
-            nn.Dropout(),
-            nn.Linear(256, 128)
         )
 
     def forward_once(self, x):

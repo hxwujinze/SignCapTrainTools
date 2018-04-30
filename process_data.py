@@ -55,7 +55,8 @@ def feature_extract(data_set, type_name, for_cnn):
 
         if not for_cnn:
             # 一般的特征提取过程
-            seg_ARC_feat, seg_RMS_feat, seg_ZC_feat, seg_polyfit_data, seg_all_feat \
+            # rms zc arc polyfit all
+            seg_RMS_feat, seg_ZC_feat, seg_ARC_feat, seg_polyfit_data, seg_all_feat \
                 = feature_extract_single(raw_data, type_name)
             if data_set_arc_feat is None:
                 data_set_arc_feat = [seg_ARC_feat]
@@ -76,10 +77,19 @@ def feature_extract(data_set, type_name, for_cnn):
         else:
             # cnn的特征提取过程 只使用曲线拟合特征
             seg_polyfit_feat = feature_extract_single_polyfit(raw_data, 2)
-            seg_polyfit_feat = normalize_cnn(seg_polyfit_feat)
-            # todo 拟合后切割
+            # cnn 数据的归一化
+            if type_name == 'gyr':
+                threshold = 25
+                default_scale = 200
+            else:
+                threshold = 0.3
+                default_scale = 5
+            seg_polyfit_feat = normalize(seg_polyfit_feat, threshold, default_scale)
+
+            # 多项式拟合后切割
             seg_polyfit_feat = seg_polyfit_feat[8:-8, :]
             # 给CNN喂128的片段短数据  拟合压缩前是
+
             data_set_polyfit_feat.append(seg_polyfit_feat)
             seg_all_feat = seg_polyfit_feat
 
@@ -132,56 +142,53 @@ def feature_extract_single_polyfit(data, compress):
 
     return seg_poly_fit
 
-
-
-def feature_extract_single(data, type_name):
+def feature_extract_single(polyfit_data, type_name):
     # 对曲线拟合后的数据进行特征提取 效果更好
-    data = feature_extract_single_polyfit(data, 1)
-    window_amount = len(data) / WINDOW_SIZE
-    # windows_data = data.reshape(window_amount, WINDOW_SIZE, TYPE_LEN[type_name])
-    windows_data = np.vsplit(data, window_amount)
+    polyfit_data = feature_extract_single_polyfit(polyfit_data, 1)
+    window_amount = len(polyfit_data) / WINDOW_SIZE
+    windows_data = np.vsplit(polyfit_data, window_amount)
     win_index = 0
-    is_first = True
-    seg_all_feat = []
+    seg_ARC_feat = None
+    seg_RMS_feat = None
+    seg_ZC_feat = None
+
+    features = [seg_RMS_feat, seg_ZC_feat, seg_ARC_feat, ]
     for Win_Data in windows_data:
         # 依次处理每个window的数据
         win_RMS_feat = np.sqrt(np.mean(np.square(Win_Data), axis=0))
         Win_Data1 = np.vstack((Win_Data[1:, :], np.zeros((1, TYPE_LEN[type_name]))))
         win_ZC_feat = np.sum(np.sign(-np.sign(Win_Data) * np.sign(Win_Data1) + 1), axis=0) - 1
         win_ARC_feat = np.apply_along_axis(ARC, 0, Win_Data)
+        # arc 只要后面几个系数的数据
+        win_ARC_feat = win_ARC_feat.ravel()[-5:, ]
         # 将每个window特征提取的数据用vstack叠起来
         win_index += 1
-        # 将三种特征拼接成一个长向量
-        # 层叠 遍历展开
-
-        # todo 没有zc特征
-        # Seg_Feat = np.vstack((win_RMS_feat, win_ZC_feat, win_ARC_feat))
-        Seg_Feat = np.vstack((win_RMS_feat, win_ARC_feat))
-
-        All_Seg_Feat = Seg_Feat.ravel()
-        # (x_rms, y_rms, z_rms, x_zc, y_zc, z_zc, x_a, y_a, z_a, x_b, y_b, y_c, z_a, z_b, z_c)
-        if is_first:
-            is_first = False
-            seg_all_feat = All_Seg_Feat
-        else:
-            seg_all_feat = np.vstack((seg_all_feat, All_Seg_Feat))
-
-    seg_all_feat = normalize(seg_all_feat)
-    # seg_all_feat = np.abs(seg_all_feat)
-    seg_RMS_feat = seg_all_feat[:, 0:3]
-    if len(seg_all_feat[0]) == 44:
-        seg_ZC_feat = seg_all_feat[:, 3:6]
-        seg_ARC_feat = seg_all_feat[:, 6:]
+        each_feat_type_data = (win_RMS_feat, win_ZC_feat, win_ARC_feat)
+        for each in range(len(each_feat_type_data)):
+            if features[each] is None:
+                features[each] = each_feat_type_data[each]
+            else:
+                features[each] = np.vstack((features[each], each_feat_type_data[each]))
+    #  根据各种数据 各种特征值规律的不同
+    #  进行归一化需要设置不同的归一化阈值以及默认scale
+    if type_name == 'gyr':
+        threshold_list = [15, 1, 20]
+        default_scale = [200, 3, 100]
     else:
-        seg_ARC_feat = seg_all_feat[:, 3:]
-        seg_ZC_feat = [[]]
-    # try:
-    #     seg_ARC_feat = np.hsplit(seg_ARC_feat, 4)
-    # except ValueError:
-    #     print(seg_ARC_feat)
-    # seg_ARC_feat = np.vstack(tuple(seg_ARC_feat))
+        threshold_list = [0.15, 1, 0.5]
+        default_scale = [2.5, 3, 1.2]
+    for each in range(len(threshold_list)):
+        features[each] = normalize(features[each],
+                                   threshold_list[each],
+                                   default_scale[each])
 
-    return seg_ARC_feat, seg_RMS_feat, seg_ZC_feat, data, seg_all_feat
+    # 曲线拟合 a + bx + cx^2 + dx^3
+    # (x_rms, y_rms, z_rms, x_zc, y_zc, z_zc, x_c, y_c, z_c, x_d, y_d ,z_d)
+    seg_all_feat = np.hstack(tuple(features))
+    features.append(polyfit_data)
+    features.append(seg_all_feat)
+    # rms zc arc polyfit all
+    return tuple(features)
 
 def ARC(Win_Data):
     Len_Data = len(Win_Data)
@@ -260,7 +267,7 @@ def wavelet_trans(data):
     # 转换为 时序-通道 追加一个零点在转换回 通道-时序
     data = pywt.threshold(data, 12, 'hard')  # 再次阈值滤波
     data = data.T
-    data = normalize(data)  # 转换为 时序-通道 以时序轴 对每个通道进行normalize
+    data = normalize(data, threshold=1, default_scale=60)  # 转换为 时序-通道 以时序轴 对每个通道进行normalize
     data = eliminate_zero_shift(data)  # 消除零点漂移
     data = np.abs(data)  # 反转
     return data  # 转换为 时序-通道 便于rnn输入
@@ -362,9 +369,9 @@ def expand_emg_data_single(data):
 normalize_scaler = preprocessing.MinMaxScaler()
 normalize_scale_collect = []
 
-def normalize(data):
+def normalize(data, threshold, default_scale):
     normalize_scaler.fit(data)
-    scale_adjust()
+    scale_adjust(threshold, default_scale)
     data = normalize_scaler.transform(data)
     # 记录每次的scale情况
     # curr_scale = [each for each in normalize_scaler.scale_]
@@ -384,40 +391,23 @@ min 数组中存的是最小值 乘以scale 数组的值 相当于数据基准�
 由于RNN CNN scale数据的特性不同 决定是否进行scale的阈值也不同 
 """
 
-
-def scale_adjust():
+def scale_adjust(threshold, default_scale):
     """
     根据scale的情况判断是否需要进行scale
     scale的大小是由这个数据的max - min的得出 如果相差不大 就不进行scale
     通过修改scale和min的值使其失去scale的作用
-
+    @:parameter threshold 过滤阈值 当最大最小值之差小于这个阈值 不进行归一化
     note: scale 的大小是max - min 的倒数
     """
+    threshold = 1 / threshold
+    default_scale = 1 / default_scale
     curr_scale = normalize_scaler.scale_
     curr_min = normalize_scaler.min_
     for each_val in range(len(curr_scale)):
-        if curr_scale[each_val] > 3:
-            curr_min[each_val] = curr_min[each_val] / curr_scale[each_val]
-            curr_scale[each_val] = 1
-        # if abs(curr_min[each_val]) < 50:
-        #     curr_min[each_val] = 0
-
-def normalize_cnn(data):
-    normalize_scaler.fit(data)
-    curr_scale = normalize_scaler.scale_
-    curr_min = normalize_scaler.min_
-    for each_val in range(len(curr_scale)):
-        if curr_scale[each_val] > 5:
-            curr_min[each_val] = curr_min[each_val] / curr_scale[each_val]
-            curr_scale[each_val] = 1
-
-    data = normalize_scaler.transform(data)
-    # 记录每次的scale情况
-    # curr_scale = [each for each in normalize_scaler.scale_]
-    # normalize_scale_collect.append(curr_scale)
-    return data
-
-
+        if curr_scale[each_val] > threshold:
+            # 当最大最小值不满足一般数据规律时 设置为默认归一化的scale
+            curr_min[each_val] = curr_min[each_val] * default_scale / curr_scale[each_val]
+            curr_scale[each_val] = default_scale
 
 def get_feat_norm_scales():
     # 0 ARC 1 RMS 2 ZC 3 ALL

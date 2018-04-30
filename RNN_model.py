@@ -7,14 +7,14 @@ import torch.nn.functional as F
 每次调整模型修改这里
 修改完成进行部署时直接将该文件复制到服务器目录
 """
-INPUT_SIZE = 38
-BATCH_SIZE = 64
+INPUT_SIZE = 30
+BATCH_SIZE = 32
 EPOCH = 1100
 NNet_SIZE = 32
 NNet_LEVEL = 3
 NNet_output_size = 24
 CLASS_COUNT = 24
-LEARNING_RATE = 0.0005
+LEARNING_RATE = 0.00015
 WEIGHT_DECAY = 0.0000002
 DROPOUT = 0.5
 

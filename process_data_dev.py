@@ -17,7 +17,7 @@ import process_data
 from CNN_model import CNN, get_max_index
 from process_data import feature_extract_single, feature_extract, TYPE_LEN, \
     append_single_data_feature, get_feat_norm_scales, append_feature_vector, \
-    normalize_scale_collect, wavelet_trans, normalize_cnn
+    normalize_scale_collect, wavelet_trans, normalize
 from verify_model import SiameseNetwork
 
 Width_EMG = 9
@@ -198,7 +198,7 @@ def pickle_train_data(batch_num, model_type, feedback_data=None):
             # 一个手势一个手势的读入数据
             raw_data_set = load_train_data(batch_num=each_batch, sign_id=each_sign)
             extracted_data_set = []
-            # todo 拟合前切割
+            #  拟合前切割
             # if is_for_cnn:
             #     raw_data_set = cut_out_data(raw_data_set)  # 给CNN喂128的片段短数据
 
@@ -503,8 +503,9 @@ def process_raw_capture_data(raw_data, for_cnn=False):
                 type_eumn = ['acc', 'gyr']
 
                 for each_type in type_eumn:
+                    data_seg = raw_data[each_type][normalized_ptr_start:normalized_ptr_end, :]
                     # todo 这里选择是否归一化
-                    tmp = normalize_cnn(raw_data[each_type][normalized_ptr_start:normalized_ptr_end, :])
+                    tmp = normalize(data_seg, threshold=2, default_scale=60)
                     # tmp = raw_data[each_type][normalized_ptr_start:normalized_ptr_end, :]
                     if normalized_data[each_type] is None:
                         normalized_data[each_type] = tmp
@@ -549,7 +550,7 @@ def generate_plot(data_set, data_cap_type, data_feat_type):
     if data_feat_type != 'arc':
         dim_size = TYPE_LEN[data_cap_type]
     else:
-        dim_size = 3 * 4  # 三个维度的三次多项式拟合的四个系数
+        dim_size = len(data_set[data_feat_type][0][0, :])  # 三个维度的三次多项式拟合的四个系数
     for dimension in range(dim_size):
         fig_ = plt.figure()
         if data_feat_type != 'arc':
@@ -598,7 +599,7 @@ def print_scale(cap_type, scale_feat_name):
 
             # scale_list = []
             data_set = load_train_data(sign_id=sign_id, batch_num=batch_id)  # 循环从采集文件获取数据
-            feature_extract(data_set, cap_type)
+            feature_extract(data_set, cap_type, True)
             if cap_type != 'emg':
                 scales = get_feat_norm_scales()
                 if scale_feat_name == 'arc':
@@ -810,17 +811,18 @@ def main():
     # 从feedback文件获取数据
     # data_set = load_feed_back_data()[sign_id]
 
-    # print_train_data(sign_id=16,
-    #                  batch_num=57,
-    #                  data_cap_type='acc',  # 数据采集类型 emg acc gyr
-    #                  data_feat_type='poly_fit',# 数据特征类型 zc rms arc trans(emg) poly_fit(cnn)
-    #                  for_cnn=True)  # cnn数据是128长度  db4 4层变换 普通的则是 160 db3 5
-
+    print_train_data(sign_id=13,
+                     batch_num=10,
+                     data_cap_type='acc',  # 数据采集类型 emg acc gyr
+                     data_feat_type='rms',  # 数据特征类型 zc rms arc trans(emg) poly_fit(cnn)
+                     for_cnn=False)  # cnn数据是128长度  db4 4层变换 普通的则是 160 db3 5
+    #
     # 输出上次处理过的数据的scale
     # print_scale('acc', 'all')
 
     # 将采集数据转换为输入训练程序的数据格式
     pickle_train_data(batch_num=91, model_type='cnn')
+    pickle_train_data(batch_num=91, model_type='rnn')
 
     # 生成验证模型的参照系向量
     # generate_verify_vector()
