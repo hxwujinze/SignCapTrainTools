@@ -17,8 +17,7 @@ from torch.autograd import Variable
 import process_data
 from CNN_model import CNN, get_max_index
 from process_data import feature_extract_single, feature_extract, TYPE_LEN, \
-    append_single_data_feature, get_feat_norm_scales, append_feature_vector, \
-    normalize_scale_collect, wavelet_trans
+    append_single_data_feature, append_feature_vector, wavelet_trans
 from verify_model import SiameseNetwork
 
 Width_EMG = 9
@@ -31,7 +30,7 @@ WINDOW_STEP = 16
 EMG_WINDOW_SIZE = 3
 FEATURE_LENGTH = 44
 
-DATA_DIR_PATH = os.getcwd() + '\\data'
+DATA_DIR_PATH = os.path.join(os.getcwd(), 'data')
 myfont = font_manager.FontProperties(fname='C:/Windows/Fonts/msyh.ttc')
 mpl.rcParams['axes.unicode_minus'] = False
 
@@ -166,78 +165,102 @@ def cut_out_data(data):
             data[each_cap_type][each_data] = data[each_cap_type][each_data][16:144, :]
     return data
 
-def pickle_train_data(batch_num, model_type, feedback_data=None):
+def pickle_train_data(batch_num, feedback_data=None):
     """
     从采集生成的文件夹中读取数据 存为python对象
+    同时生成RNN CNN的两种数据
 
     采用追加的方式 当采集文件夹数大于当前数据对象batch最大值时 进行数据的追加
     :param batch_num: 当前需要提取的采集数据文件夹数
-    :param model_type
     :param feedback_data 是否将之前feedback数据纳入训练集
-    :return: None  过程函数
     """
-    data_set_file_name = 'data_set' + '_' + model_type
+    model_names = ['rnn', 'cnn']
 
-    try:
-        file = open(DATA_DIR_PATH + '\\' + data_set_file_name, 'r+b')
-        train_data = pickle.load(file)
-        file.close()
-    except IOError:
-        train_data = (0, [])
+    train_data_set = {
+        'rnn': [],
+        'cnn': []
+    }
 
-    # (batch_amount, data_set_emg)
-    # 元组的形式保存数据数据对象
-    # [0] 是当前数据对象所包含的batch数
-    # [1] 是数据对象的实例
-    # 每次都从上一次读取的数据集对象的基础上进行更新
-    curr_batch_num = train_data[0]
-    train_data = train_data[1]
-    is_for_cnn = model_type == 'cnn'
-
-    for each_batch in range(curr_batch_num + 1, batch_num + 1):
+    overall_data = {
+        'rnn': None,
+        'cnn': None
+    }
+    extract_time = time.clock()
+    for each_batch in range(1, batch_num + 1):
         for each_sign in range(1, len(GESTURES_TABLE) + 1):
             # 一个手势一个手势的读入数据
             raw_data_set = load_train_data(batch_num=each_batch, sign_id=each_sign)
-            extracted_data_set = []
+            extracted_data_set = {
+                'rnn': [],
+                'cnn': []
+            }
+
             #  拟合前切割
             # if is_for_cnn:
             #     raw_data_set = cut_out_data(raw_data_set)  # 给CNN喂128的片段短数据
 
             # 根据数据采集种类 提取特征
             for each_cap_type in CAP_TYPE_LIST:
-                extracted_data_blocks = feature_extract(raw_data_set, each_cap_type, is_for_cnn)['append_all']
-                extracted_data_set.append(extracted_data_blocks)
+                if each_cap_type == 'emg':
+                    extracted_data_set['rnn'].append(process_data.emg_feature_extract(raw_data_set, False)['trans'])
+                    extracted_data_set['cnn'].append(process_data.emg_feature_extract(raw_data_set, True)['trans'])
+                else:
+                    extracted_data_blocks = feature_extract(raw_data_set, each_cap_type)
+                    extracted_data_set['rnn'].append(extracted_data_blocks['append_all'])
+                    extracted_data_set['cnn'].append(extracted_data_blocks['poly_fit'])
 
-            batch_list = append_feature_vector(extracted_data_set)
-            for each_data_mat in batch_list:
-                train_data.append((each_sign, each_data_mat))
+            for each_name in model_names:
+                extracted_data_set[each_name] = append_feature_vector(extracted_data_set[each_name])
+                # print('append %s took %f' % (each_name, time.clock() - append_time))
 
-    curr_data_set_cont = batch_num
-    if feedback_data is not None:
-        train_data_from_feedback = []
-        for sign_id in range(len(feedback_data)):
-            extracted_data_set = []
-            sign_raw_data = feedback_data[sign_id]
+                for each_data_mat in extracted_data_set[each_name]:
+                    if overall_data[each_name] is None:
+                        overall_data[each_name] = each_data_mat
+                    else:
+                        overall_data[each_name] = np.vstack((overall_data[each_name], each_data_mat))
+                    train_data_set[each_name].append((each_sign, each_data_mat))
 
-            if len(sign_raw_data) == 0:
-                continue
-            for each_cap_type in CAP_TYPE_LIST:
-                extracted_data_set.append(feature_extract(sign_raw_data, each_cap_type, is_for_cnn)['append_all'])
+    scaler = process_data.DataScaler(DATA_DIR_PATH)
+    for model_type in model_names:
+        scaler.generate_scale_data(overall_data[model_type], model_type)
+        if model_type == 'rnn':
+            vectors_name = ['rnn_acc', 'rnn_gyr', 'rnn_emg']
+            vectors_range = [(0, 11), (11, 22), (22, 30)]
+        else:
+            vectors_name = ['cnn_acc', 'cnn_gyr', 'cnn_emg']
+            vectors_range = ((0, 3), (3, 6), (6, 14))
+        scaler.split_scale_vector(model_type, vectors_name, vectors_range)
 
-            batch_list = append_feature_vector(extracted_data_set)
-            for each_data_mat in batch_list:
-                train_data_from_feedback.append((sign_id, each_data_mat))
-        # 将feedback的结果追加在后面
-        train_data = (curr_data_set_cont, train_data, train_data_from_feedback)
-    else:
-        train_data = (curr_data_set_cont, train_data)
+    scaler.expand_scale_data()
+    scaler.store_scale_data()
 
-    # train_data format:
-    # (batch_amount, data_set_emg)
-    file = open(DATA_DIR_PATH + '\\' + data_set_file_name, 'w+b')
-    pickle.dump(train_data, file)
-    file.close()
+    # curr_data_set_cont = batch_num
+    # if feedback_data is not None:
+    #     train_data_from_feedback = []
+    #     for sign_id in range(len(feedback_data)):
+    #         extracted_data_set = []
+    #         sign_raw_data = feedback_data[sign_id]
+    #
+    #         if len(sign_raw_data) == 0:
+    #             continue
+    #         for each_cap_type in CAP_TYPE_LIST:
+    #             extracted_data_set.append(feature_extract(sign_raw_data, each_cap_type, is_for_cnn)['append_all'])
+    #
+    #         batch_list = append_feature_vector(extracted_data_set)
+    #         for each_data_mat in batch_list:
+    #             train_data_from_feedback.append((sign_id, each_data_mat))
+    #     将feedback的结果追加在后面
+    # train_data = (curr_data_set_cont, train_data, train_data_from_feedback)
+    # else:
+    #     train_data = (curr_data_set_cont, train_data)
+    #
 
+    for each_model_type in model_names:
+        file = open(DATA_DIR_PATH + '\\data_set_' + each_model_type, 'w+b')
+        pickle.dump((batch_num, train_data_set[each_model_type]), file)
+        file.close()
+
+    print('extract take %f' % (time.clock() - extract_time))
 
 """
 raw capture data: {
@@ -583,70 +606,6 @@ def generate_plot(data_set, data_cap_type, data_feat_type):
             plt.pause(0.008)
         plt.legend(handler_map=handle_lines_map)
 
-def print_scale(cap_type, scale_feat_name):
-    """
-    获取特征提取后 向量归一化使用的scale
-    通过设置手语id的范围 和 batch id的范围，
-    来在不同散点图显示 各种手语在不同batch的scale情况
-    并能计算其平均值和中位数 保存至文件 在 在线识别的时候作为参照和默认归一化向量使用
-    :param cap_type:  数据采集的类型
-    :param scale_feat_name: 数据的特征类型 rms zc arc all （emg 只用all就好）
-    """
-    scale_list = []
-    fig = plt.figure()
-    fig.add_subplot(111, title='%s %s scales' % (cap_type, scale_feat_name))
-
-    # 设置batch的range
-    batch_range = list(range(1, 20))
-    batch_range.extend(list(range(40, 75)))
-
-    # 扫描各个batch的各个手语
-    for batch_id in batch_range:  # batch id range
-        for sign_id in range(1, 25):  # sign id 或者是 batch id 的 range
-            if sign_id == 14:
-                continue
-
-            # scale_list = []
-            data_set = load_train_data(sign_id=sign_id, batch_num=batch_id)  # 循环从采集文件获取数据
-            feature_extract(data_set, cap_type, True)
-            if cap_type != 'emg':
-                scales = get_feat_norm_scales()
-                if scale_feat_name == 'arc':
-                    scale_list.extend(scales['all'])
-                    for each_val in range(len(scale_list)):
-                        scale_list[each_val] = scale_list[each_val][0:12]
-                else:
-                    scale_list.extend(scales[scale_feat_name])
-            else:
-                # emg 时 scale只有一个
-                scale_list.extend([each for each in normalize_scale_collect])
-            # 显示单个手语的scale的平均值
-            # scale_list = np.mean(scale_list, axis=0)
-            # plt.scatter(np.array(range(len(scale_list))), scale_list, marker='.')
-
-        # 输出每个手语的scale
-        # for each in scale_list:
-        #     plt.scatter(np.array(range(len(each))), each, marker='.')
-
-        # 一个手语一个散点图
-        # fig = plt.figure()
-        # fig.add_subplot(111, title='sign id: %d %s scales' % (i, scale_feat_name))
-
-    # 计算所有手语的scale 平均值 和 中位数
-    # scale_list_mean = np.mean(scale_list, axis=0)
-    # scale_list_median = np.median(scale_list, axis=0)
-
-    # 绘制出scale平均值和中位数
-    # fig = plt.figure()
-    # fig.add_subplot(111, title='mean scale')
-    # plt.scatter(np.array(range(len(scale_list_mean))), scale_list_mean, marker='.', )
-    #
-    # fig_ = plt.figure()
-    # fig_.add_subplot(111, title='median scale')
-    # plt.scatter(np.array(range(len(scale_list_median))), scale_list_median, marker='.', )
-
-    plt.show()
-
 def print_train_data(sign_id, batch_num, data_cap_type, data_feat_type, for_cnn=False):
     """
     从采集文件中将 训练用采集数据 绘制折线图
@@ -662,7 +621,21 @@ def print_train_data(sign_id, batch_num, data_cap_type, data_feat_type, for_cnn=
     # if for_cnn:
     #     data_set = cut_out_data(data_set)
 
-    data_set = feature_extract(data_set, data_cap_type, for_cnn=for_cnn)
+    if data_cap_type == 'emg':
+        data_set = process_data.emg_feature_extract(data_set, for_cnn)
+    else:
+        data_set = feature_extract(data_set, data_cap_type)
+
+    scaler = process_data.DataScaler(DATA_DIR_PATH)
+    to_scale_data = data_set[data_feat_type]
+    if for_cnn:
+        scale_type_name = 'cnn_%s' % data_cap_type
+    else:
+        scale_type_name = 'rnn_%s_%s' % (data_cap_type, data_feat_type)
+
+    for each in range(len(to_scale_data)):
+        to_scale_data[each] = scaler.normalize(to_scale_data[each], scale_type_name)
+
     generate_plot(data_set, data_cap_type, data_feat_type)
     plt.show()
 
@@ -820,18 +793,17 @@ def main():
     # 从feedback文件获取数据
     # data_set = load_feed_back_data()[sign_id]
 
-    # print_train_data(sign_id=13,
-    #                  batch_num=10,
-    #                  data_cap_type='acc',  # 数据采集类型 emg acc gyr
-    #                  data_feat_type='rms',  # 数据特征类型 zc rms arc trans(emg) poly_fit(cnn)
-    #                  for_cnn=False)  # cnn数据是128长度  db4 4层变换 普通的则是 160 db3 5
+    print_train_data(sign_id=5,
+                     batch_num=10,
+                     data_cap_type='emg',  # 数据采集类型 emg acc gyr
+                     data_feat_type='trans',  # 数据特征类型 zc rms arc trans(emg) poly_fit(cnn)
+                     for_cnn=True)  # cnn数据是128长度  db4 4层变换 普通的则是 160 db3 5
     #
     # 输出上次处理过的数据的scale
     # print_scale('acc', 'all')
 
     # 将采集数据转换为输入训练程序的数据格式
-    # pickle_train_data(batch_num=91, model_type='cnn')
-    # pickle_train_data(batch_num=91, model_type='rnn')
+    # pickle_train_data(batch_num=80)
     #
     # 生成验证模型的参照系向量
     # generate_verify_vector()
@@ -843,18 +815,18 @@ def main():
     # print_raw_capture_data()
 
     # 从 raw data history中获得data 并处理成能够直接输入到cnn的形式
-    online_data = process_raw_capture_data(load_raw_capture_data(), for_cnn=True)
+    # online_data = process_raw_capture_data(load_raw_capture_data(), for_cnn=True)
 
     # 识别能力测试
-    cnn_recognize_test(online_data)
+    # cnn_recognize_test(online_data)
 
     # online data is a tuple(data_single, data_overall)
-    processed_data = split_online_processed_data(online_data)
-    print_processed_online_data(processed_data,
-                                cap_type='acc',
-                                feat_type='cnn_raw',  # arc zc rms trans  cnn_raw cnn的输入
-                                overall=True,
-                                block_cnt=6)
+    # processed_data = split_online_processed_data(online_data)
+    # print_processed_online_data(processed_data,
+    #                             cap_type='acc',
+    #                             feat_type='cnn_raw',  # arc zc rms trans  cnn_raw cnn的输入
+    #                             overall=True,
+    #                             block_cnt=6)
 
 
 if __name__ == "__main__":

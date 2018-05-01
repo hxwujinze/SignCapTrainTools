@@ -12,6 +12,7 @@ from torch.autograd import Variable
 from RNN_model import BATCH_SIZE, EPOCH, NNet_SIZE, NNet_LEVEL, NNet_output_size, \
     CLASS_COUNT, LEARNING_RATE, WEIGHT_DECAY, DROPOUT
 from RNN_model import LSTM
+from process_data import DataScaler
 
 # 由于softmax输出的是十四个概率值 于是取最大的那个就是最可能正确的答案
 # 取最大值 并且转换为int
@@ -38,24 +39,17 @@ try:
     raw_data = raw_data[1].extend(raw_data[2])
 except IndexError:
     raw_data = raw_data[1]
-# train_data => (batch_amount, data_set_emg)
-
+# train_data => (batch_amount, data_set)
 random.shuffle(raw_data)
 
-SHORT_INPUT = False
 
 # process data
+data_scale = DataScaler(DATA_DIR_PATH)
 data_input, data_label = [], []
-cnt = 0
 for (each_label, each_data) in raw_data:
-    # if len(each_data) == 10:
-    if SHORT_INPUT:
-        data_input.append(each_data[1:9])
-    else:
-        data_input.append(each_data)
+    each_data = data_scale.normalize(each_data, 'rnn')
+    data_input.append(each_data)
     data_label.append(each_label - 1)
-    # else:
-    #     print("len error")
 
 DATA_SET_SIZE = len(data_input)
 INPUT_LEN = len(data_input[0])
