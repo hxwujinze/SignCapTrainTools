@@ -9,7 +9,7 @@ import torch.nn.functional as F
 
 LEARNING_RATE = 0.00015
 WEIGHT_DECAY = 0.0000002
-EPOCH = 700
+EPOCH = 860
 BATCH_SIZE = 64
 
 class SiameseNetwork(nn.Module):

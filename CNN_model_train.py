@@ -10,7 +10,6 @@ import torch.utils.data as Data
 from torch.autograd import Variable
 
 from CNN_model import CNN, BATCH_SIZE, LEARNING_RATE, WEIGHT_DECAY, EPOCH, get_max_index
-from process_data import DataScaler
 
 DATA_DIR_PATH = os.path.join(os.getcwd(), 'data')
 
@@ -26,11 +25,9 @@ except IndexError:
 # train_data => (batch_amount, data_set_emg)
 
 random.shuffle(raw_data)
-data_scaler = DataScaler(DATA_DIR_PATH)
 data_input, data_label = [], []
 for (each_label, each_data) in raw_data:
     # 需要调整长度以及转置成时序
-    each_data = data_scaler.normalize(each_data, 'cnn')
     data_input.append(each_data.T)
     data_label.append(each_label - 1)
 

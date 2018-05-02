@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 
-LEARNING_RATE = 0.0001
+LEARNING_RATE = 0.00015
 WEIGHT_DECAY = 0.00000002
-EPOCH = 1200
+EPOCH = 1300
 BATCH_SIZE = 64
 
 class CNN(nn.Module):

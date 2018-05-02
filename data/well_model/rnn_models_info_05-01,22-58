@@ -1,0 +1,24 @@
+data_set_size:9444
+input_size:10
+batch_size:64
+accuracy:0.9800
+loss: 2.247202
+NNet:3 x 40
+Epoch: 1200
+NNet output size: 24
+classes cnt 24
+learning rate 0.000400
+weight_decay 0.000000
+dropout 0.500000LSTM(
+  (lstm): LSTM(30, 40, num_layers=3, batch_first=True, dropout=0.5)
+  (out): Sequential(
+    (0): BatchNorm1d(40, eps=1e-05, momentum=0.1, affine=True)
+    (1): LeakyReLU(0.01)
+    (2): Dropout(p=0.5)
+    (3): Linear(in_features=40, out_features=24, bias=True)
+    (4): Dropout(p=0.5)
+    (5): LeakyReLU(0.01)
+    (6): Linear(in_features=24, out_features=24, bias=True)
+    (7): Softmax()
+  )
+)

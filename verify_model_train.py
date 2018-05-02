@@ -5,14 +5,12 @@ import pickle
 import random
 import time
 
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.utils.data as Data
 from torch.autograd import Variable
 
-from process_data import DataScaler
 from verify_model import SiameseNetwork, ContrastiveLoss, \
     LEARNING_RATE, EPOCH, BATCH_SIZE, WEIGHT_DECAY
 
@@ -67,17 +65,18 @@ except IndexError:
 # train_data => (batch_amount, data_set_emg)
 
 random.shuffle(raw_data)
-data_scaler = DataScaler(DATA_DIR_PATH)
 for each in range(len(raw_data)):
     raw_data[each] = (raw_data[each][0],  # label
-                      data_scaler.normalize(raw_data[each][1], 'cnn').T)  # data
+                      raw_data[each][1].T)  # data
 
 print('data_len: %s' % len(raw_data))
 print('each input len: %s' % len(raw_data[0][1][0]))
 
 siamese_data_set = SiameseNetworkTrainDataSet(raw_data)
 
+# 输出几个训练数据看看
 def look_input_data():
+    import matplotlib.pyplot as plt
     for i in range(20):
         each_sample = siamese_data_set[i]
         fig = plt.figure()
@@ -85,8 +84,6 @@ def look_input_data():
         plt.plot(range(len(each_sample[0][0])), each_sample[0][0])
         plt.plot(range(len(each_sample[1][0])), each_sample[1][0])
     plt.show()
-
-# 输出几个训练数据看看
 # look_input_data()
 
 # split test data

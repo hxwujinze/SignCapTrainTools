@@ -256,6 +256,10 @@ def pickle_train_data(batch_num, feedback_data=None):
     #
 
     for each_model_type in model_names:
+        data_set = train_data_set[each_model_type]
+        for each in range(len(data_set)):
+            data_set[each] = (data_set[each][0],
+                              scaler.normalize(data_set[each][1], each_model_type))
         file = open(DATA_DIR_PATH + '\\data_set_' + each_model_type, 'w+b')
         pickle.dump((batch_num, train_data_set[each_model_type]), file)
         file.close()
@@ -793,17 +797,17 @@ def main():
     # 从feedback文件获取数据
     # data_set = load_feed_back_data()[sign_id]
 
-    print_train_data(sign_id=5,
-                     batch_num=10,
-                     data_cap_type='emg',  # 数据采集类型 emg acc gyr
-                     data_feat_type='trans',  # 数据特征类型 zc rms arc trans(emg) poly_fit(cnn)
+    print_train_data(sign_id=11,
+                     batch_num=26,
+                     data_cap_type='acc',  # 数据采集类型 emg acc gyr
+                     data_feat_type='poly_fit',  # 数据特征类型 zc rms arc trans(emg) poly_fit(cnn)
                      for_cnn=True)  # cnn数据是128长度  db4 4层变换 普通的则是 160 db3 5
     #
     # 输出上次处理过的数据的scale
     # print_scale('acc', 'all')
 
     # 将采集数据转换为输入训练程序的数据格式
-    # pickle_train_data(batch_num=80)
+    # pickle_train_data(batch_num=87)
     #
     # 生成验证模型的参照系向量
     # generate_verify_vector()

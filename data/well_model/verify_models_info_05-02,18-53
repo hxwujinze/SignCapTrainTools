@@ -1,0 +1,26 @@
+data_size:10044
+batch_size:64
+diff:3.40430
+same:0.09832
+loss: 0.007380
+Epoch: 860
+learning rate 0.000150
+weight_decay 0.000000
+SiameseNetwork(
+  (cnn1): Sequential(
+    (0): Conv1d(14, 32, kernel_size=(4,), stride=(1,), padding=(2,))
+    (1): BatchNorm1d(32, eps=1e-05, momentum=0.1, affine=True)
+    (2): LeakyReLU(0.01)
+    (3): MaxPool1d(kernel_size=3, stride=3, padding=0, dilation=1, ceil_mode=False)
+    (4): Conv1d(32, 32, kernel_size=(3,), stride=(1,), padding=(1,))
+    (5): BatchNorm1d(32, eps=1e-05, momentum=0.1, affine=True)
+  )
+  (out): Sequential(
+    (0): LeakyReLU(0.01)
+    (1): Dropout(p=0.5)
+    (2): Linear(in_features=672, out_features=256, bias=True)
+    (3): LeakyReLU(0.01)
+    (4): Dropout(p=0.5)
+    (5): Linear(in_features=256, out_features=128, bias=True)
+  )
+)

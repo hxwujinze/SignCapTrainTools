@@ -361,8 +361,7 @@ class DataScaler:
         self.scale_datas = {}
         try:
             file_ = open(self.scale_data_path, 'rb')
-            self.scale_datas = pickle.load(file_, encoding='iso-8859-1')
-            # python2 pickle中读入必须加 encoding='iso-8859-1'
+            self.scale_datas = pickle.load(file_)
             file_.close()
             print("curr scalers' type: \n\"%s\"" % str(self.scale_datas.keys()))
         except FileNotFoundError:
