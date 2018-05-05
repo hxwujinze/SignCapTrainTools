@@ -31,6 +31,7 @@ EMG_WINDOW_SIZE = 3
 FEATURE_LENGTH = 44
 
 DATA_DIR_PATH = os.path.join(os.getcwd(), 'data')
+print(DATA_DIR_PATH)
 myfont = font_manager.FontProperties(fname='C:/Windows/Fonts/msyh.ttc')
 mpl.rcParams['axes.unicode_minus'] = False
 
@@ -85,19 +86,10 @@ def load_train_data(sign_id, batch_num):
         for i in range(1, capture_times):
             resize_data_emg = length_adjust(data_emg[index:index + capture_length_book[i], 0:8])
             processed_data_emg.append(resize_data_emg)  # init
-            # processed_data_emg.append(standardize(resize_data_emg))
-            # processed_data_emg.append(normalize(resize_data_emg))
-
             resize_data_acc = length_adjust(data_acc[index:index + capture_length_book[i], :])
             processed_data_acc.append(resize_data_acc)
-            # processed_data_acc.append(standardize(resize_data_acc))
-            # processed_data_acc.append(normalize(resize_data_acc))
-
             resize_data_gyr = length_adjust(data_gyr[index:index + capture_length_book[i], :])
             processed_data_gyr.append(resize_data_gyr)
-            # processed_data_gyr.append(standardize(resize_data_gyr))
-            # processed_data_gyr.append(normalize(resize_data_gyr))
-
             index += capture_length_book[i]
         print('Load done , batch num: %d, sign id: %d, ' % (batch_num, sign_id,))
 
@@ -194,10 +186,10 @@ def pickle_train_data(batch_num, feedback_data=None):
                 'rnn': [],
                 'cnn': []
             }
-
-            #  拟合前切割
+            # 拟合前切割
+            # 给CNN喂128的片段短数据
             # if is_for_cnn:
-            #     raw_data_set = cut_out_data(raw_data_set)  # 给CNN喂128的片段短数据
+            #     raw_data_set = cut_out_data(raw_data_set)  
 
             # 根据数据采集种类 提取特征
             for each_cap_type in CAP_TYPE_LIST:
@@ -508,7 +500,7 @@ def process_raw_capture_data(raw_data, for_cnn=False):
         'gyr': None,
         'emg': None,
     }
-
+    data_scaler = process_data.DataScaler(DATA_DIR_PATH)
 
     start_ptr = 0
     end_ptr = 160
@@ -533,14 +525,9 @@ def process_raw_capture_data(raw_data, for_cnn=False):
                 for each_type in type_eumn:
                     data_seg = raw_data[each_type][normalized_ptr_start:normalized_ptr_end, :]
 
-                    if each_type == 'gyr':
-                        threshold = 20
-                        default_scale = 200
-                    else:
-                        threshold = 0.3
-                        default_scale = 2
                     # todo 这里选择是否归一化
                     tmp = data_seg
+                    tmp = data_scaler.normalize(tmp, 'cnn_' + each_type)
                     # tmp = normalize(data_seg, threshold, default_scale)
                     if normalized_data[each_type] is None:
                         normalized_data[each_type] = tmp
@@ -597,11 +584,10 @@ def generate_plot(data_set, data_cap_type, data_feat_type):
         fig_.add_subplot(111, title=plt_title)
         capture_times = len(data_set[data_feat_type])
         capture_times = capture_times if capture_times < 20 else 20
-        # 最多只绘制十次采集的数据 （太多了会看不清）
+        capture_times = 1
 
+        # 最多只绘制20次采集的数据 （太多了会看不清）
         handle_lines_map = {}
-
-        # capture_times = 6
         for capture_num in range(0, capture_times):
             single_capture_data = trans_data_to_time_seqs(data_set[data_feat_type][capture_num])
             data = single_capture_data[dimension]
@@ -637,8 +623,9 @@ def print_train_data(sign_id, batch_num, data_cap_type, data_feat_type, for_cnn=
     else:
         scale_type_name = 'rnn_%s_%s' % (data_cap_type, data_feat_type)
 
-    for each in range(len(to_scale_data)):
-        to_scale_data[each] = scaler.normalize(to_scale_data[each], scale_type_name)
+    if data_feat_type != 'raw' and data_feat_type != 'trans':
+        for each in range(len(to_scale_data)):
+            to_scale_data[each] = scaler.normalize(to_scale_data[each], scale_type_name)
 
     generate_plot(data_set, data_cap_type, data_feat_type)
     plt.show()
@@ -721,15 +708,14 @@ def cnn_recognize_test(online_data):
         verifier_cost_time = time.clock() - start_time
         print('time cost : cnn %f, verify %f' % (cnn_cost_time, verifier_cost_time))
 
-
-def generate_verify_vector():
+def generate_verify_vector(model_type):
     """
     根据所有训练数据生成reference vector 并保存至文件
     :return:
     """
-    print('generating verify vector ...')
+    print('generating verify vector (%s)...' % model_type)
     # load data 从训练数据中获取
-    f = open(os.path.join(DATA_DIR_PATH, 'data_set_cnn'), 'r+b')
+    f = open(os.path.join(DATA_DIR_PATH, 'data_set_%s' % model_type), 'r+b')
     raw_data = pickle.load(f)
     f.close()
     try:
@@ -740,14 +726,16 @@ def generate_verify_vector():
 
     data_orderby_class = {}
     for (each_label, each_data) in raw_data:
+        if model_type == 'cnn':
+            each_data = each_data.T
         if data_orderby_class.get(each_label) is None:
             # 需要调整长度以及转置成时序
-            data_orderby_class[each_label] = [each_data.T]
+            data_orderby_class[each_label] = [each_data]
         else:
-            data_orderby_class[each_label].append(each_data.T)
+            data_orderby_class[each_label].append(each_data)
 
-    verifier = SiameseNetwork(train=False)
-    load_model_param(verifier, 'verify_model')
+    verifier = SiameseNetwork(train=False, model_type=model_type)
+    load_model_param(verifier, 'verify_model_' + model_type)
     verifier.double()
     verify_vectors = {}
     #
@@ -756,28 +744,30 @@ def generate_verify_vector():
         # fig = plt.figure()
         # fig.add_subplot(111,title='sign id %d' % each_sign)
         for each_cap in data_orderby_class[each_sign]:
+            start = time.clock()
             each_cap = torch.from_numpy(np.array([each_cap])).double()
             each_cap = Variable(each_cap)
             vector = verifier(each_cap)
             vector = vector.data.float().numpy()[0]
             verify_vectors[each_sign].append(vector)
+            # print('verify cost time %f' % (time.clock() - start))
 
     print('show image? y/n')
     is_show = input()
     if is_show == 'y':
         fig = plt.figure()
-        fig.add_subplot(111)
+        fig.add_subplot(111, title='%s verify vectors' % model_type)
 
-    for each_sign in verify_vectors.keys():
-        verify_vector_mean = np.mean(np.array(verify_vectors[each_sign]), axis=0)
-        verify_vectors[each_sign] = verify_vector_mean
-        if is_show == 'y':
-            plt.scatter(range(len(verify_vector_mean)), verify_vector_mean, marker='.')
-            plt.pause(0.3)
-    if is_show == 'y':
+        for each_sign in verify_vectors.keys():
+            verify_vector_mean = np.mean(np.array(verify_vectors[each_sign]), axis=0)
+            verify_vectors[each_sign] = verify_vector_mean
+            if is_show == 'y':
+                plt.scatter(range(len(verify_vector_mean)), verify_vector_mean, marker='.')
+                print("sign: " + str(each_sign))
+                plt.pause(0.3)
         plt.show()
 
-    file_ = open(DATA_DIR_PATH + '\\reference_verify_vector', 'wb')
+    file_ = open(DATA_DIR_PATH + '\\reference_verify_vector_' + model_type, 'wb')
     pickle.dump(verify_vectors, file_)
     file_.close()
 
@@ -797,20 +787,20 @@ def main():
     # 从feedback文件获取数据
     # data_set = load_feed_back_data()[sign_id]
 
-    print_train_data(sign_id=11,
-                     batch_num=26,
-                     data_cap_type='acc',  # 数据采集类型 emg acc gyr
-                     data_feat_type='poly_fit',  # 数据特征类型 zc rms arc trans(emg) poly_fit(cnn)
-                     for_cnn=True)  # cnn数据是128长度  db4 4层变换 普通的则是 160 db3 5
+    # print_train_data(sign_id=22,
+    #                  batch_num=81,
+    #                  data_cap_type='emg',  # 数据采集类型 emg acc gyr
+    #                  data_feat_type='trans',  # 数据特征类型 zc rms arc trans(emg) poly_fit(cnn)
+    #                  for_cnn=True)  # cnn数据是128长度  db4 4层变换 普通的则是 160 db3 5
     #
     # 输出上次处理过的数据的scale
     # print_scale('acc', 'all')
 
     # 将采集数据转换为输入训练程序的数据格式
     # pickle_train_data(batch_num=87)
-    #
+
     # 生成验证模型的参照系向量
-    # generate_verify_vector()
+    generate_verify_vector('rnn')
 
     # 从recognized data history中取得数据
     # online_data = load_online_processed_data()

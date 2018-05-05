@@ -83,12 +83,13 @@ def feature_extract(data_set, type_name):
 
 def feature_extract_single_polyfit(data, compress):
     seg_poly_fit = None
+    window_range = 16
     start_ptr = 0
-    end_ptr = 16
+    end_ptr = window_range
     while end_ptr <= len(data):
         window_data = data[start_ptr:end_ptr, :]
         window_extract_data = None
-        x = np.arange(0, 16, 1)
+        x = np.arange(0, window_range, 1)
         y = window_data
         # 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15
         # 0   2   4   6   8   10    11    14
@@ -96,7 +97,7 @@ def feature_extract_single_polyfit(data, compress):
         for each_channel in range(3):
             dots_in_channel = None
             window_poly = np.poly1d(poly_args[:, each_channel])
-            for dot in np.arange(0, 16, compress):
+            for dot in np.arange(0, window_range, compress):
                 # assemble each dot's each channel
                 if dots_in_channel is None:
                     dots_in_channel = window_poly(dot)
@@ -113,8 +114,8 @@ def feature_extract_single_polyfit(data, compress):
             seg_poly_fit = window_extract_data
         else:
             seg_poly_fit = np.vstack((seg_poly_fit, window_extract_data))
-        start_ptr += 16
-        end_ptr += 16
+        start_ptr += window_range
+        end_ptr += window_range
 
     return seg_poly_fit
 

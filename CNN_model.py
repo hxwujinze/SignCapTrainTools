@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-LEARNING_RATE = 0.00015
+LEARNING_RATE = 0.000125
 WEIGHT_DECAY = 0.00000002
 EPOCH = 1300
 BATCH_SIZE = 64

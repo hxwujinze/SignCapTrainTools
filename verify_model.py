@@ -7,62 +7,97 @@ import torch.nn.functional as F
 # CNN: input len -> output len
 # Lout=floor((Lin+2∗padding−dilation∗(kernel_size−1)−1)/stride+1)
 
-LEARNING_RATE = 0.00015
+LEARNING_RATE = 0.000125
 WEIGHT_DECAY = 0.0000002
-EPOCH = 860
+EPOCH = 900
 BATCH_SIZE = 64
 
 class SiameseNetwork(nn.Module):
-    def __init__(self, train=True):
+    def __init__(self, train=True, model_type='cnn'):
         """
         用于生成vector 进行识别结果验证
         :param train: 设置是否为train 模式
+        :param model_type: 设置验证神经网络的模型种类 有rnn 和cnn两种
         """
         nn.Module.__init__(self)
         if train:
             self.status = 'train'
         else:
             self.status = 'eval'
+        self.model_type = model_type
 
-        self.cnn1 = nn.Sequential(
-            # nn.BatchNorm1d(14),
-            nn.Conv1d(  # 14 x 64
-                in_channels=14,
-                out_channels=32,
-                kernel_size=4,
-                padding=2,
-                stride=1,
-            ),  # 32 x 64
-            # 通常插入在激活函数和FC层之间 对神经网络的中间参数进行normalization
-            nn.BatchNorm1d(32),  # 32 x 64
-            nn.LeakyReLU(),
-            # only one pooling
-            nn.MaxPool1d(kernel_size=3),  # 32 x 21
+        if model_type == 'cnn':
+            self.coding_model = nn.Sequential(
+                # nn.BatchNorm1d(14),
+                nn.Conv1d(  # 14 x 64
+                    in_channels=14,
+                    out_channels=32,
+                    kernel_size=4,
+                    padding=2,
+                    stride=1,
+                ),  # 32 x 64
+                # 通常插入在激活函数和FC层之间 对神经网络的中间参数进行normalization
+                nn.BatchNorm1d(32),  # 32 x 64
+                nn.LeakyReLU(),
+                # only one pooling
+                nn.MaxPool1d(kernel_size=3),  # 32 x 21
 
-            nn.Conv1d(
-                in_channels=32,
-                out_channels=32,
-                kernel_size=3,
-                padding=1,
-                stride=1
-            ),  # 60 x 32
-            nn.BatchNorm1d(32),  # 32 x 21
-            # nn.LeakyReLU(),
-            # nn.MaxPool1d(kernel_size=2),  # 32 x 21
-        )
+                nn.Conv1d(
+                    in_channels=32,
+                    out_channels=32,
+                    kernel_size=3,
+                    padding=1,
+                    stride=1
+                ),  # 60 x 32
+                nn.BatchNorm1d(32),  # 32 x 21
+            )
+            self.out = nn.Sequential(
+                nn.LeakyReLU(),
+                nn.Dropout(),
+                nn.Linear(32 * 21, 256),
+                nn.LeakyReLU(),
+                nn.Dropout(),
+                nn.Linear(256, 128),
+            )
 
-        self.out = nn.Sequential(
-            nn.LeakyReLU(),
-            nn.Dropout(),
-            nn.Linear(32 * 21, 256),
-            nn.LeakyReLU(),
-            nn.Dropout(),
-            nn.Linear(256, 128),
-        )
+        elif model_type == 'rnn':
+            global LEARNING_RATE
+            global EPOCH
+            global BATCH_SIZE
+            LEARNING_RATE = 0.0004
+            EPOCH = 1000
+            BATCH_SIZE = 64
+
+            INPUT_SIZE = 30  # 2 *（3 + 3 + 5） + 8
+            NNet_SIZE = 40
+            NNet_LEVEL = 3
+            NNet_output_size = 32
+
+            self.coding_model = nn.LSTM(
+                input_size=INPUT_SIZE,  # feature's number
+                hidden_size=NNet_SIZE,  # hidden size of rnn layers
+                num_layers=NNet_LEVEL,  # the number of rnn layers
+                batch_first=True,
+                dropout=0.5
+            )
+            self.out = nn.Sequential(
+                nn.BatchNorm1d(NNet_SIZE),
+                nn.LeakyReLU(),
+                nn.Dropout(),
+                nn.Linear(NNet_SIZE, NNet_SIZE),
+                nn.LeakyReLU(),
+                nn.Dropout(),
+                nn.Linear(NNet_SIZE, NNet_output_size),
+            )
 
     def forward_once(self, x):
-        x = self.cnn1(x)
-        x = x.view(x.size(0), -1)
+        if self.model_type == 'rnn':
+            # rnn模型有额外的输入
+            lstm_out, (h_n, h_c) = self.coding_model(x)
+            x = lstm_out[:, -1, :]
+        else:  # cnn的情况
+            x = self.coding_model(x)
+            x = x.view(x.size(0), -1)
         out = self.out(x)
         return out
 
