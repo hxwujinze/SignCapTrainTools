@@ -83,7 +83,12 @@ def load_train_data(sign_id, batch_num):
         index = 0
         capture_times = len(capture_length_book.keys())
         capture_times = capture_times if capture_times < 20 else 21
-        for i in range(1, capture_times):
+        start_at = 1
+        if batch_num >= 20:
+            capture_times = capture_times if capture_times < 20 else 22
+            start_at = 0
+
+        for i in range(start_at, capture_times):
             resize_data_emg = length_adjust(data_emg[index:index + capture_length_book[i], 0:8])
             processed_data_emg.append(resize_data_emg)  # init
             resize_data_acc = length_adjust(data_acc[index:index + capture_length_book[i], :])
@@ -744,7 +749,6 @@ def generate_verify_vector(model_type):
         # fig = plt.figure()
         # fig.add_subplot(111,title='sign id %d' % each_sign)
         for each_cap in data_orderby_class[each_sign]:
-            start = time.clock()
             each_cap = torch.from_numpy(np.array([each_cap])).double()
             each_cap = Variable(each_cap)
             vector = verifier(each_cap)
@@ -758,13 +762,14 @@ def generate_verify_vector(model_type):
         fig = plt.figure()
         fig.add_subplot(111, title='%s verify vectors' % model_type)
 
-        for each_sign in verify_vectors.keys():
-            verify_vector_mean = np.mean(np.array(verify_vectors[each_sign]), axis=0)
-            verify_vectors[each_sign] = verify_vector_mean
-            if is_show == 'y':
-                plt.scatter(range(len(verify_vector_mean)), verify_vector_mean, marker='.')
-                print("sign: " + str(each_sign))
-                plt.pause(0.3)
+    for each_sign in verify_vectors.keys():
+        verify_vector_mean = np.mean(np.array(verify_vectors[each_sign]), axis=0)
+        verify_vectors[each_sign] = verify_vector_mean
+        if is_show == 'y':
+            plt.scatter(range(len(verify_vector_mean)), verify_vector_mean, marker='.')
+            print("sign: " + str(each_sign))
+            plt.pause(0.3)
+    if is_show == 'y':
         plt.show()
 
     file_ = open(DATA_DIR_PATH + '\\reference_verify_vector_' + model_type, 'wb')
@@ -797,10 +802,11 @@ def main():
     # print_scale('acc', 'all')
 
     # 将采集数据转换为输入训练程序的数据格式
-    # pickle_train_data(batch_num=87)
+    pickle_train_data(batch_num=87)
 
     # 生成验证模型的参照系向量
-    generate_verify_vector('rnn')
+    # generate_verify_vector('rnn')
+    # generate_verify_vector('cnn')
 
     # 从recognized data history中取得数据
     # online_data = load_online_processed_data()

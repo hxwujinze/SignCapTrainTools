@@ -41,12 +41,13 @@ data_label = torch.from_numpy(np.array(data_label))
 
 # split and batch with data loader
 # 0~500 test
-test_input_init = data_input[:500]
-test_label = data_label[:500]
+test_input_init = data_input[:1000]
+test_label = data_label[:1000]
+test_label = test_label.numpy()
 
 # 500~n train
-training_input = data_input[500:]
-training_label = data_label[500:]
+training_input = data_input[1000:]
+training_label = data_label[1000:]
 training_set = Data.TensorDataset(data_tensor=training_input,
                                   target_tensor=training_label)
 
@@ -90,17 +91,34 @@ for epoch in range(EPOCH + 1):
         test_output = get_max_index(test_output)
         # softmax是14个概率的输出
         # test数据是连续的100个输入 于是输出也是一个 100 * 14 的矩阵
-        testLabel_ = test_label.numpy()
-        right = 0
-        error = 0
-        for i in range(len(testLabel_)):
-            if test_output[i] == testLabel_[i]:
-                right += 1
+        test_result = {}
+        all_t_cnt = 0
+        all_f_cnt = 0
+        for i in range(len(test_label)):
+            if test_result.get(test_label[i]) is None:
+                test_result[test_label[i]] = {
+                    't': 0,
+                    'f': 0
+                }
+            if test_output[i] == test_label[i]:
+                all_t_cnt += 1
+                test_result[test_label[i]]['t'] += 1
             else:
-                error += 1
-        result = right / (right + error)
-        print("\n\nepoch: %s\naccuracy: %.4f\nloss: %s\nprogress: %.2f" %
-              (epoch, result, loss.data.float()[0], 100 * epoch / EPOCH))
+                all_f_cnt += 1
+                test_result[test_label[i]]['f'] += 1
+        accuracy_res = "accuracy of each sign:\n"
+
+        for each_sign in sorted(test_result.keys()):
+            t_cnt = test_result[each_sign]['t']
+            f_cnt = test_result[each_sign]['f']
+            accuracy_rate = t_cnt / (t_cnt + f_cnt)
+            accuracy_res += "sign %d, accuracy %f (%d / %d)\n" % \
+                            (each_sign, accuracy_rate, t_cnt, t_cnt + f_cnt)
+        accuracy_res += "overall accuracy: %.5f\n" % (all_t_cnt / (all_f_cnt + all_t_cnt))
+
+        print(accuracy_res)
+        print("\n\nepoch: %s\nloss: %s\nprogress: %.2f" %
+              (epoch, loss.data.float()[0], 100 * epoch / EPOCH))
 
 end_time_raw = time.time()
 end_time = time.strftime('%H:%M:%S', time.localtime(end_time_raw))
@@ -118,7 +136,7 @@ file = open(os.path.join(DATA_DIR_PATH, 'cnn_models_info_%s' % end_time), 'w')
 info = 'data_set_size:%d\n' % DATA_SET_SIZE + \
        'input_size:%d\n' % INPUT_LEN + \
        'batch_size:%d\n' % BATCH_SIZE + \
-       'accuracy:%.4f\n' % result + \
+       accuracy_res + \
        'loss: %f\n' % loss.data.float()[0] + \
        'Epoch: %d\n' % EPOCH + \
        'learning rate %f\n' % LEARNING_RATE + \

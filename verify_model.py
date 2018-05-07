@@ -44,17 +44,17 @@ class SiameseNetwork(nn.Module):
 
                 nn.Conv1d(
                     in_channels=32,
-                    out_channels=32,
+                    out_channels=40,
                     kernel_size=3,
                     padding=1,
                     stride=1
                 ),  # 60 x 32
-                nn.BatchNorm1d(32),  # 32 x 21
+                nn.BatchNorm1d(40),  # 32 x 21
             )
             self.out = nn.Sequential(
                 nn.LeakyReLU(),
                 nn.Dropout(),
-                nn.Linear(32 * 21, 256),
+                nn.Linear(40 * 21, 256),
                 nn.LeakyReLU(),
                 nn.Dropout(),
                 nn.Linear(256, 128),

@@ -15,37 +15,40 @@ class CNN(nn.Module):
             # nn.BatchNorm1d(14),
             nn.Conv1d(
                 in_channels=14,
-                out_channels=32,
-                kernel_size=4,
-                padding=2,
+                out_channels=28,
+                kernel_size=3,
+                padding=1,
                 stride=1,
             ),  # Lout=floor((Lin+2∗padding−dilation∗(kernel_size−1)−1)/stride+1)
             # output 28 x 64
-            nn.BatchNorm1d(32),
+            nn.BatchNorm1d(28),
             nn.LeakyReLU(),
             nn.MaxPool1d(kernel_size=3)  # 28 x 21
         )
 
         self.conv2 = nn.Sequential(
             nn.Conv1d(
-                in_channels=32,
-                out_channels=46,
+                in_channels=28,
+                out_channels=32,
                 kernel_size=3,
                 padding=1,
                 stride=1
             ),  # 32 x 16
-            nn.BatchNorm1d(46),
+            nn.BatchNorm1d(32),
             nn.LeakyReLU(),
-            nn.MaxPool1d(kernel_size=2),  # 40 x 10
+            nn.MaxPool1d(kernel_size=2),  # 32 x 10
         )
 
         self.out1 = nn.Sequential(
             nn.LeakyReLU(),
             nn.Dropout(),
-            nn.Linear(46 * 10, 256),
+            nn.Linear(32 * 10, 128),
             nn.LeakyReLU(),
             nn.Dropout(),
-            nn.Linear(256, 24),
+            nn.Linear(128, 64),
+            nn.LeakyReLU(),
+            nn.Dropout(),
+            nn.Linear(64, 24),
             nn.Softmax(),
         )
 

@@ -161,11 +161,17 @@ def train(verify_model_type):
                     same_arg.append(dissimilarities[each])
             same_arg = np.array(same_arg)
             diff_arg = np.array(diff_arg)
+
+            diff_min = np.min(diff_arg)
+            same_max = np.min(same_arg)
             same_arg = np.mean(same_arg, axis=-1)
             diff_arg = np.mean(diff_arg, axis=-1)
             print("****************************")
-            print('epoch %d\ndiff: %.5f\nsame: %.5f\nloss: %.6f\nprogress: %.2f' %
-                  (epoch, diff_arg, same_arg, loss.data.float()[0], 100 * epoch / EPOCH))
+            print('epoch %d\nloss: %.6f\nprogress: %.2f' %
+                  (epoch, loss.data.float()[0], 100 * epoch / EPOCH))
+            diff_res = "diff info \n    diff min: %.5f ,mean: %.5f\n" % (diff_min, diff_arg) + \
+                       "    same max: %.5f, mean: %.5f" % (same_max, same_arg)
+            print(diff_res)
 
     end_time_raw = time.time()
     end_time = time.strftime('%H:%M:%S', time.localtime(end_time_raw))
@@ -186,8 +192,7 @@ def train(verify_model_type):
 
     info = 'data_size:%d\n' % len(siamese_data_set) + \
            'batch_size:%d\n' % BATCH_SIZE + \
-           'diff:%.5f\n' % diff_arg + \
-           'same:%.5f\n' % same_arg + \
+           diff_res + \
            'loss: %f\n' % loss.data.float()[0] + \
            'Epoch: %d\n' % EPOCH + \
            'learning rate %f\n' % LEARNING_RATE + \
