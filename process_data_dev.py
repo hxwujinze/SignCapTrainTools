@@ -746,8 +746,17 @@ def generate_verify_vector(model_type):
     #
     for each_sign in data_orderby_class.keys():
         verify_vectors[each_sign] = []
-        # fig = plt.figure()
-        # fig.add_subplot(111,title='sign id %d' % each_sign)
+
+        if each_sign < 15:
+            fig = plt.figure()
+            fig.add_subplot(111, title='sign id %d' % each_sign)
+            each_cap = data_orderby_class[each_sign][0]
+            each_cap = torch.from_numpy(np.array([each_cap])).double()
+            each_cap = Variable(each_cap)
+            vector = verifier(each_cap)
+            vector = vector.data.float().numpy()[0]
+            plt.scatter(range(len(vector)), vector, marker='.')
+
         for each_cap in data_orderby_class[each_sign]:
             each_cap = torch.from_numpy(np.array([each_cap])).double()
             each_cap = Variable(each_cap)
@@ -755,6 +764,8 @@ def generate_verify_vector(model_type):
             vector = vector.data.float().numpy()[0]
             verify_vectors[each_sign].append(vector)
             # print('verify cost time %f' % (time.clock() - start))
+
+    plt.show()
 
     print('show image? y/n')
     is_show = input()
@@ -802,10 +813,10 @@ def main():
     # print_scale('acc', 'all')
 
     # 将采集数据转换为输入训练程序的数据格式
-    pickle_train_data(batch_num=87)
+    # pickle_train_data(batch_num=87)
 
     # 生成验证模型的参照系向量
-    # generate_verify_vector('rnn')
+    generate_verify_vector('rnn')
     # generate_verify_vector('cnn')
 
     # 从recognized data history中取得数据

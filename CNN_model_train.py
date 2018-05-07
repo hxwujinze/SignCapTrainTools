@@ -116,9 +116,10 @@ for epoch in range(EPOCH + 1):
                             (each_sign, accuracy_rate, t_cnt, t_cnt + f_cnt)
         accuracy_res += "overall accuracy: %.5f\n" % (all_t_cnt / (all_f_cnt + all_t_cnt))
 
-        print(accuracy_res)
-        print("\n\nepoch: %s\nloss: %s\nprogress: %.2f" %
+        print("**************************************")
+        print("epoch: %s\nloss: %s\nprogress: %.2f" %
               (epoch, loss.data.float()[0], 100 * epoch / EPOCH))
+        print(accuracy_res)
 
 end_time_raw = time.time()
 end_time = time.strftime('%H:%M:%S', time.localtime(end_time_raw))

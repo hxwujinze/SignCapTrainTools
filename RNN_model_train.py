@@ -11,7 +11,7 @@ from torch.autograd import Variable
 
 from RNN_model import BATCH_SIZE, EPOCH, NNet_SIZE, NNet_LEVEL, NNet_output_size, \
     CLASS_COUNT, LEARNING_RATE, WEIGHT_DECAY, DROPOUT
-from RNN_model import LSTM
+from RNN_model import RNN
 
 # 由于softmax输出的是十四个概率值 于是取最大的那个就是最可能正确的答案
 # 取最大值 并且转换为int
@@ -58,13 +58,13 @@ data_label = torch.from_numpy(np.array(data_label))
 
 # split and batch with data loader
 # 0~1000 test
-test_input_init = data_input[:1000]
-test_label = data_label[:1000]
+test_input_init = data_input[:800]
+test_label = data_label[:800]
 test_label = test_label.numpy()
 
 # 1000~n train
-training_input = data_input[1000:]
-training_label = data_label[1000:]
+training_input = data_input[800:]
+training_label = data_label[800:]
 training_set = Data.TensorDataset(data_tensor=training_input,
                                   target_tensor=training_label)
 loader = Data.DataLoader(
@@ -74,7 +74,7 @@ loader = Data.DataLoader(
 )
 
 # define loss function and optimizer
-model = LSTM()
+model = RNN()
 model.cuda()
 # 转换为GPU对象
 
@@ -139,9 +139,10 @@ for epoch in range(EPOCH + 1):
                             (each_sign, accuracy_rate, t_cnt, t_cnt + f_cnt)
         accuracy_res += "overall accuracy: %.5f\n" % (all_t_cnt / (all_f_cnt + all_t_cnt))
 
-        print(accuracy_res)
-        print("\n\nepoch: %s\nloss: %s\nprogress: %.2f" %
+        print("****************************************")
+        print("epoch: %s\nloss: %s\nprogress: %.2f" %
               (epoch, loss.data.float()[0], 100 * epoch / EPOCH))
+        print(accuracy_res)
 
 
 end_time_raw = time.time()

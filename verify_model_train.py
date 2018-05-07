@@ -12,7 +12,7 @@ import torch.utils.data as Data
 from torch.autograd import Variable
 
 from verify_model import SiameseNetwork, ContrastiveLoss, \
-    LEARNING_RATE, EPOCH, BATCH_SIZE, WEIGHT_DECAY
+    EPOCH, BATCH_SIZE, WEIGHT_DECAY
 
 DATA_DIR_PATH = os.path.join(os.getcwd(), 'data')
 
@@ -124,6 +124,12 @@ def train(verify_model_type):
     model.cuda()
 
     loss_func = ContrastiveLoss()
+    global LEARNING_RATE
+    if type_name == 'rnn':
+        LEARNING_RATE = 0.00035
+    else:
+        LEARNING_RATE = 0.000125
+    print("lr: %f " % LEARNING_RATE)
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
 
     start_time_raw = time.time()
@@ -163,14 +169,18 @@ def train(verify_model_type):
             diff_arg = np.array(diff_arg)
 
             diff_min = np.min(diff_arg)
-            same_max = np.min(same_arg)
+            diff_max = np.max(diff_arg)
+            same_max = np.max(same_arg)
+            same_min = np.min(same_arg)
             same_arg = np.mean(same_arg, axis=-1)
             diff_arg = np.mean(diff_arg, axis=-1)
             print("****************************")
             print('epoch %d\nloss: %.6f\nprogress: %.2f' %
                   (epoch, loss.data.float()[0], 100 * epoch / EPOCH))
-            diff_res = "diff info \n    diff min: %.5f ,mean: %.5f\n" % (diff_min, diff_arg) + \
-                       "    same max: %.5f, mean: %.5f" % (same_max, same_arg)
+            diff_res = "diff info \n    diff max: %f min: %f, mean: %f\n" % \
+                       (diff_max, diff_min, diff_arg) + \
+                       "    same max: %f min: %f, mean: %f" % \
+                       (same_max, same_min, same_arg)
             print(diff_res)
 
     end_time_raw = time.time()
@@ -192,8 +202,8 @@ def train(verify_model_type):
 
     info = 'data_size:%d\n' % len(siamese_data_set) + \
            'batch_size:%d\n' % BATCH_SIZE + \
-           diff_res + \
-           'loss: %f\n' % loss.data.float()[0] + \
+           diff_res + '\n' \
+                      'loss: %f\n' % loss.data.float()[0] + \
            'Epoch: %d\n' % EPOCH + \
            'learning rate %f\n' % LEARNING_RATE + \
            'weight_decay %f\n' % WEIGHT_DECAY
@@ -202,4 +212,5 @@ def train(verify_model_type):
     file.close()
 
 if __name__ == '__main__':
-    train('cnn')
+    type_name = input()
+    train(type_name)

@@ -8,20 +8,19 @@ import torch.nn as nn
 """
 INPUT_SIZE = 30
 BATCH_SIZE = 64
-NNet_SIZE = 32
+NNet_SIZE = 40
 NNet_LEVEL = 3
-NNet_output_size = 24
-EPOCH = 1400
+NNet_output_size = 32
+EPOCH = 1200
 CLASS_COUNT = 24
 LEARNING_RATE = 0.00037
-WEIGHT_DECAY = 0.0000002
+WEIGHT_DECAY = 0.000001
 DROPOUT = 0.5
 
-class LSTM(nn.Module):
+class RNN(nn.Module):
     def __init__(self):
-        super(LSTM, self).__init__()
-
-        self.lstm = nn.LSTM(
+        super(RNN, self).__init__()
+        self.rnn = nn.LSTM(
             input_size=INPUT_SIZE,  # feature's number
             # 2 *（3 + 3 + 5） + 8
             hidden_size=NNet_SIZE,  # hidden size of rnn layers
@@ -34,7 +33,9 @@ class LSTM(nn.Module):
         # 使得模型保存一定的随机性 避免过拟合严重
 
         self.out = nn.Sequential(
-            nn.BatchNorm1d(NNet_SIZE),
+            nn.LeakyReLU(),
+            nn.Dropout(),
+            nn.Linear(NNet_SIZE, NNet_SIZE),
             nn.LeakyReLU(),
             nn.Dropout(),
             nn.Linear(NNet_SIZE, NNet_output_size),
@@ -49,6 +50,14 @@ class LSTM(nn.Module):
 
 
     def forward(self, x):
-        lstm_out, (h_n, h_c) = self.lstm(x)
-        out = self.out(lstm_out[:, -1, :])
+        rnn_out, h_n = self.rnn(x)
+        # GRU model 返回两个值
+        #   一个是每次输入一个向量时模型的输出
+        #        batch_num x input_len x each_out_vector
+        #   一个是模型在最后一刻内部的hidden state信息
+        #   LSTM 是三个值 后两个是hidden state 和 cell state
+        rnn_out = rnn_out[:, -1, :]
+        # 只取最后一个output 这个output是模型输入了所有输入向量时
+        # 给出的结果
+        out = self.out(rnn_out)
         return out
