@@ -41,13 +41,13 @@ data_label = torch.from_numpy(np.array(data_label))
 
 # split and batch with data loader
 # 0~500 test
-test_input_init = data_input[:1000]
-test_label = data_label[:1000]
+test_input_init = data_input[:300]
+test_label = data_label[:300]
 test_label = test_label.numpy()
 
 # 500~n train
-training_input = data_input[1000:]
-training_label = data_label[1000:]
+training_input = data_input[300:]
+training_label = data_label[300:]
 training_set = Data.TensorDataset(data_tensor=training_input,
                                   target_tensor=training_label)
 
@@ -71,6 +71,11 @@ print('start_at: %s' % start_time)
 # start training
 # epoch: 用所有训练数据跑一遍称为一次epoch
 for epoch in range(EPOCH + 1):
+    if epoch % 100 == 0:
+        LEARNING_RATE -= LEARNING_RATE * 0.1
+        optimizer = torch.optim.Adam(cnn.parameters(),
+                                     lr=LEARNING_RATE,
+                                     weight_decay=WEIGHT_DECAY)
     for batch_x, batch_y in loader:
         batch_x = Variable(batch_x).cuda()
         batch_y = Variable(batch_y).cuda()

@@ -9,7 +9,6 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import torch.nn.functional as F
 from matplotlib import font_manager
 from matplotlib.legend_handler import HandlerLine2D
 from torch.autograd import Variable
@@ -589,7 +588,7 @@ def generate_plot(data_set, data_cap_type, data_feat_type):
         fig_.add_subplot(111, title=plt_title)
         capture_times = len(data_set[data_feat_type])
         capture_times = capture_times if capture_times < 20 else 20
-        capture_times = 1
+        # capture_times = 1
 
         # 最多只绘制20次采集的数据 （太多了会看不清）
         handle_lines_map = {}
@@ -678,10 +677,10 @@ def print_processed_online_data(data, cap_type, feat_type, block_cnt=0, overall=
 
 
 def cnn_recognize_test(online_data):
-    verifier = SiameseNetwork(train=False)
-    load_model_param(verifier, 'verify_model')
-    verifier.double()
-    verifier.eval()
+    # verifier = SiameseNetwork(train=False)
+    # load_model_param(verifier, 'verify_model')
+    # verifier.double()
+    # verifier.eval()
 
     cnn = CNN()
     cnn.double()
@@ -689,7 +688,7 @@ def cnn_recognize_test(online_data):
     cnn.cpu()
     load_model_param(cnn, 'cnn_model')
 
-    file_ = open(DATA_DIR_PATH + '\\reference_verify_vector', 'rb')
+    file_ = open(DATA_DIR_PATH + '\\reference_verify_vector_cnn', 'rb')
     verify_vectors = pickle.load(file_)
     file_.close()
     online_data = online_data['data']
@@ -704,12 +703,12 @@ def cnn_recognize_test(online_data):
         start_time = time.clock()
         print('\nindex from cnn %d' % predict_index)
         print('sign: %s' % GESTURES_TABLE[predict_index])
-        verify_vec = verifier(x)
-        reference_vec = np.array([verify_vectors[predict_index + 1]])
-        reference_vec = Variable(torch.from_numpy(reference_vec).double())
-        diff = F.pairwise_distance(verify_vec, reference_vec)
-        diff = torch.squeeze(diff).data[0]
-        print('diff %f' % diff)
+        # verify_vec = verifier(x)
+        # reference_vec = np.array([verify_vectors[predict_index + 1]])
+        # reference_vec = Variable(torch.from_numpy(reference_vec).double())
+        # diff = F.pairwise_distance(verify_vec, reference_vec)
+        # diff = torch.squeeze(diff).data[0]
+        # print('diff %f' % diff)
         verifier_cost_time = time.clock() - start_time
         print('time cost : cnn %f, verify %f' % (cnn_cost_time, verifier_cost_time))
 
@@ -747,16 +746,6 @@ def generate_verify_vector(model_type):
     for each_sign in data_orderby_class.keys():
         verify_vectors[each_sign] = []
 
-        if each_sign < 15:
-            fig = plt.figure()
-            fig.add_subplot(111, title='sign id %d' % each_sign)
-            each_cap = data_orderby_class[each_sign][0]
-            each_cap = torch.from_numpy(np.array([each_cap])).double()
-            each_cap = Variable(each_cap)
-            vector = verifier(each_cap)
-            vector = vector.data.float().numpy()[0]
-            plt.scatter(range(len(vector)), vector, marker='.')
-
         for each_cap in data_orderby_class[each_sign]:
             each_cap = torch.from_numpy(np.array([each_cap])).double()
             each_cap = Variable(each_cap)
@@ -765,7 +754,6 @@ def generate_verify_vector(model_type):
             verify_vectors[each_sign].append(vector)
             # print('verify cost time %f' % (time.clock() - start))
 
-    plt.show()
 
     print('show image? y/n')
     is_show = input()
@@ -817,7 +805,7 @@ def main():
 
     # 生成验证模型的参照系向量
     generate_verify_vector('rnn')
-    # generate_verify_vector('cnn')
+    generate_verify_vector('cnn')
 
     # 从recognized data history中取得数据
     # online_data = load_online_processed_data()

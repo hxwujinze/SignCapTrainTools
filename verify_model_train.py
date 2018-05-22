@@ -3,6 +3,7 @@
 import os
 import pickle
 import random
+import sys
 import time
 
 import numpy as np
@@ -12,7 +13,7 @@ import torch.utils.data as Data
 from torch.autograd import Variable
 
 from verify_model import SiameseNetwork, ContrastiveLoss, \
-    EPOCH, BATCH_SIZE, WEIGHT_DECAY
+    BATCH_SIZE, WEIGHT_DECAY
 
 DATA_DIR_PATH = os.path.join(os.getcwd(), 'data')
 
@@ -122,21 +123,22 @@ def train(verify_model_type):
     model = SiameseNetwork(model_type=verify_model_type, train=True)
     model.train()
     model.cuda()
-
+    LEARNING_RATE = model.LEARNING_RATE
     loss_func = ContrastiveLoss()
-    global LEARNING_RATE
-    if type_name == 'rnn':
-        LEARNING_RATE = 0.00035
-    else:
-        LEARNING_RATE = 0.000125
     print("lr: %f " % LEARNING_RATE)
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
 
     start_time_raw = time.time()
     start_time = time.strftime('%H:%M:%S', time.localtime(start_time_raw))
     print('start_at: %s' % start_time)
-
+    EPOCH = model.EPOCH
     for epoch in range(EPOCH + 1):
+        if epoch % 100 == 0:
+            LEARNING_RATE -= LEARNING_RATE * 0.1
+            optimizer = torch.optim.Adam(model.parameters(),
+                                         lr=LEARNING_RATE,
+                                         weight_decay=WEIGHT_DECAY)
+
         for x1, x2, label in data_loader:
             x1 = Variable(x1).float().cuda()
             x2 = Variable(x2).float().cuda()
@@ -170,17 +172,21 @@ def train(verify_model_type):
 
             diff_min = np.min(diff_arg)
             diff_max = np.max(diff_arg)
+            diff_var = np.var(diff_arg)
+
             same_max = np.max(same_arg)
             same_min = np.min(same_arg)
+            same_var = np.var(same_arg)
+
             same_arg = np.mean(same_arg, axis=-1)
             diff_arg = np.mean(diff_arg, axis=-1)
             print("****************************")
             print('epoch %d\nloss: %.6f\nprogress: %.2f' %
                   (epoch, loss.data.float()[0], 100 * epoch / EPOCH))
-            diff_res = "diff info \n    diff max: %f min: %f, mean: %f\n" % \
-                       (diff_max, diff_min, diff_arg) + \
-                       "    same max: %f min: %f, mean: %f" % \
-                       (same_max, same_min, same_arg)
+            diff_res = "diff info \n    diff max: %f min: %f, mean: %f var: %f\n " % \
+                       (diff_max, diff_min, diff_arg, diff_var) + \
+                       "    same max: %f min: %f, mean: %f, same_var %f" % \
+                       (same_max, same_min, same_arg, same_var)
             print(diff_res)
 
     end_time_raw = time.time()
@@ -212,5 +218,9 @@ def train(verify_model_type):
     file.close()
 
 if __name__ == '__main__':
-    type_name = input()
+    try:
+        type_name = sys.argv[1]
+    except IndexError:
+        print("input model manually")
+        type_name = input()
     train(type_name)

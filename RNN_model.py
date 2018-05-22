@@ -8,13 +8,15 @@ import torch.nn as nn
 """
 INPUT_SIZE = 30
 BATCH_SIZE = 64
-NNet_SIZE = 40
+
+# RNN 使用扁平而浅的网络效果好
+NNet_SIZE = 46
 NNet_LEVEL = 3
 NNet_output_size = 32
 EPOCH = 1200
 CLASS_COUNT = 24
-LEARNING_RATE = 0.00037
-WEIGHT_DECAY = 0.000001
+LEARNING_RATE = 0.00053
+WEIGHT_DECAY = 0.000008
 DROPOUT = 0.5
 
 class RNN(nn.Module):
@@ -34,7 +36,6 @@ class RNN(nn.Module):
 
         self.out = nn.Sequential(
             nn.LeakyReLU(),
-            nn.Dropout(),
             nn.Linear(NNet_SIZE, NNet_SIZE),
             nn.LeakyReLU(),
             nn.Dropout(),
