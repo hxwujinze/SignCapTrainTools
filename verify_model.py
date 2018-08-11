@@ -85,12 +85,12 @@ class SiameseNetwork(nn.Module):
             )
 
         elif model_type == 'rnn':
-            self.LEARNING_RATE = 0.0005
-            self.EPOCH = 1100
+            self.LEARNING_RATE = 0.0006
+            self.EPOCH = 900
 
             INPUT_SIZE = 30  # 2 *（3 + 3 + 5） + 8
-            NNet_SIZE = 32
-            NNet_LEVEL = 4
+            NNet_SIZE = 64
+            NNet_LEVEL = 3
             NNet_output_size = 64
 
             self.coding_model = nn.LSTM(
@@ -98,7 +98,8 @@ class SiameseNetwork(nn.Module):
                 hidden_size=NNet_SIZE,  # hidden size of rnn layers
                 num_layers=NNet_LEVEL,  # the number of rnn layers
                 batch_first=True,
-                dropout=0.5
+                dropout=0.5,
+
             )
             self.out = nn.Sequential(
                 nn.LeakyReLU(),
@@ -114,7 +115,7 @@ class SiameseNetwork(nn.Module):
     def forward_once(self, x):
         if self.model_type == 'rnn':
             # rnn模型有额外的输入
-            lstm_out, (h_n, h_c) = self.coding_model(x)
+            lstm_out, h_n_c, = self.coding_model(x)
             x = lstm_out[:, -1, :]
         else:  # cnn的情况
             x = self.coding_model(x)

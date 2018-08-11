@@ -9,16 +9,18 @@ import myo
 from Tkinter import TOP, LEFT, END
 from myo import VibrationType
 
-DATA_PATH = os.getcwd() + '\\data\\collected_data'
+DATA_PATH = os.path.join(os.getcwd(), os.path.join('data', 'collect_data_new'))
 TYPE_LIST = ['acc', 'emg', 'gyr']
-GESTURES_TABLE = ['肉 ', '鸡蛋 ', '喜欢 ', '您好 ', '你 ', '什么 ', '想 ', '我 ', '很 ', '吃 ',
-                  '老师 ', '发烧 ', '谢谢 ', '空手语', '大家', '支持', '我们', '创新', '医生', '交流',
-                  '团队', '帮助', '聋哑人', '请', '行动', '微笑', '企业家', '精神', '科技', '力量',
-                  '同理心', '志愿者', '活动', '理解']
+GESTURES_TABLE = ['朋友', '下午', '天', '早上', '上午', '中午', '谢谢', '对不起', '没关系', '昨天', '今天',
+                  '明天', '家', '回', '去', '迟到', '交流', '联系', '你', '什么', '想', '我', '机场', '晚上', '卫生间',
+                  '退', '机票', '着急', '怎么', '办', '行李', '可以', '托运', '起飞', '时间', '错过', '改签',
+                  '航班', '延期', '请问', '怎么走', '在哪里', '找', '不到', '没收', '为什么', '航站楼',
+                  '取票口', '检票口', '身份证', '手表', '钥匙', '香烟', '刀', '打火机', '沈阳', ]
+
 GESTURES_SELECTED_LIST = [0 for i in range(len(GESTURES_TABLE))]
 
 SIGN_COUNT = len(GESTURES_TABLE)
-CAPTURE_TIMES = 22
+CAPTURE_TIMES = 21
 
 STATE_END_OF_CAPTURE = -1
 # 一个手势的一次采集结束
@@ -165,7 +167,7 @@ class CaptureStore:
 
 
     def save_to_file(self):
-        os.makedirs(DATA_PATH + '\\' + str(self.capture_batch))
+        os.makedirs(os.path.join(DATA_PATH, str(self.capture_batch)))
         curr_data_path = os.path.join(DATA_PATH, str(self.capture_batch))
         DIR_NAME_LIST = ['Acceleration', 'Emg', 'Gyroscope']
         for i in range(len(TYPE_LIST)):
@@ -510,6 +512,7 @@ def main():
     myo_device = feed.get_devices()
     print(myo_device)
     time.sleep(1)
+    print(DATA_PATH)
     try:
         myo_device = myo_device[0]
         myo_device.set_stream_emg(myo.StreamEmg.enabled)

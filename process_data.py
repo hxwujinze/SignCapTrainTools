@@ -385,12 +385,8 @@ class DataScaler:
         :return: 归一化后的数据
         """
         # 在元组中保存scale使用的min 和scale数据
-        if type_name.startswith("cnn"):
-            self.scaler.min_ = self.scale_datas[type_name][0]
-            self.scaler.scale_ = self.scale_datas[type_name][1]
-        else:
-            self.scaler.fit(data)
-
+        self.scaler.min_ = self.scale_datas[type_name][0]
+        self.scaler.scale_ = self.scale_datas[type_name][1]
         return self.scaler.transform(data)
 
     def generate_scale_data(self, data, type_name):

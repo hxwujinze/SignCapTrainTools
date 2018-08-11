@@ -133,8 +133,8 @@ def train(verify_model_type):
     print('start_at: %s' % start_time)
     EPOCH = model.EPOCH
     for epoch in range(EPOCH + 1):
-        if epoch % 100 == 0:
-            LEARNING_RATE -= LEARNING_RATE * 0.1
+        if epoch % 100 == 1:
+            LEARNING_RATE -= LEARNING_RATE * 0.15
             optimizer = torch.optim.Adam(model.parameters(),
                                          lr=LEARNING_RATE,
                                          weight_decay=WEIGHT_DECAY)
@@ -181,8 +181,8 @@ def train(verify_model_type):
             same_arg = np.mean(same_arg, axis=-1)
             diff_arg = np.mean(diff_arg, axis=-1)
             print("****************************")
-            print('epoch %d\nloss: %.6f\nprogress: %.2f' %
-                  (epoch, loss.data.float()[0], 100 * epoch / EPOCH))
+            print("epoch: %s\nloss: %s\nprogress: %.2f lr: %f" %
+                  (epoch, loss.data.float()[0], 100 * epoch / EPOCH, LEARNING_RATE))
             diff_res = "diff info \n    diff max: %f min: %f, mean: %f var: %f\n " % \
                        (diff_max, diff_min, diff_arg, diff_var) + \
                        "    same max: %f min: %f, mean: %f, same_var %f" % \

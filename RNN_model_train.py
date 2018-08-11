@@ -93,7 +93,8 @@ print('start_at: %s' % start_time)
 # epoch: 用所有训练数据跑一遍称为一次epoch
 for epoch in range(EPOCH + 1):
     if epoch % 100 == 0:
-        LEARNING_RATE -= LEARNING_RATE * 0.1
+        LEARNING_RATE -= LEARNING_RATE * 0.10
+        # 在学习过程中逐渐降低学习率使其更加贴近目标
         optimizer = torch.optim.Adam(model.parameters(),
                                      lr=LEARNING_RATE,
                                      weight_decay=WEIGHT_DECAY)
@@ -146,8 +147,8 @@ for epoch in range(EPOCH + 1):
         accuracy_res += "overall accuracy: %.5f\n" % (all_t_cnt / (all_f_cnt + all_t_cnt))
 
         print("****************************************")
-        print("epoch: %s\nloss: %s\nprogress: %.2f" %
-              (epoch, loss.data.float()[0], 100 * epoch / EPOCH))
+        print("epoch: %s\nloss: %s\nprogress: %.2f lr: %f" %
+              (epoch, loss.data.float()[0], 100 * epoch / EPOCH, LEARNING_RATE))
         print(accuracy_res)
 
 

@@ -3,6 +3,7 @@
 import os
 import pickle
 import random
+import shutil
 import time
 
 import matplotlib as mpl
@@ -43,7 +44,7 @@ SIGN_COUNT = len(GESTURES_TABLE)
 
 
 # process train data
-def load_train_data(sign_id, batch_num):
+def load_train_data(sign_id, batch_num, data_path='collected_data'):
     """
     从采集文件夹中读取采集数据 并对数据进行裁剪
     读取数据 从文件中读取数据
@@ -62,7 +63,7 @@ def load_train_data(sign_id, batch_num):
     """
     # Load and return data
     # initialization
-    path = os.path.join(DATA_DIR_PATH, 'collected_data')
+    path = os.path.join(DATA_DIR_PATH, data_path)
     file_num = sign_id
     file_emg = path + '\\' + str(batch_num) + '\\Emg\\' + str(file_num) + '.txt'
     data_emg = file2matrix(file_emg, Width_EMG)
@@ -84,7 +85,7 @@ def load_train_data(sign_id, batch_num):
         capture_times = capture_times if capture_times < 20 else 21
         start_at = 1
         if batch_num >= 20:
-            capture_times = capture_times if capture_times < 20 else 22
+            capture_times = capture_times if capture_times < 20 else 21
             start_at = 0
 
         for i in range(start_at, capture_times):
@@ -126,6 +127,12 @@ def file2matrix(filename, data_col_num):
     return return_matrix
 
 def length_adjust(data):
+    """
+    主要是对老数据进行兼容 ，
+    对于新采集程序 该功能无效
+    :param data:
+    :return:
+    """
     tail_len = len(data) - LENGTH
     if tail_len < 0:
         print('Length Error')
@@ -170,7 +177,7 @@ def pickle_train_data(batch_num, feedback_data=None):
     :param batch_num: 当前需要提取的采集数据文件夹数
     :param feedback_data 是否将之前feedback数据纳入训练集
     """
-    model_names = ['rnn', 'cnn']
+    model_names = ['cnn']
 
     train_data_set = {
         'rnn': [],
@@ -190,10 +197,6 @@ def pickle_train_data(batch_num, feedback_data=None):
                 'rnn': [],
                 'cnn': []
             }
-            # 拟合前切割
-            # 给CNN喂128的片段短数据
-            # if is_for_cnn:
-            #     raw_data_set = cut_out_data(raw_data_set)  
 
             # 根据数据采集种类 提取特征
             for each_cap_type in CAP_TYPE_LIST:
@@ -217,6 +220,7 @@ def pickle_train_data(batch_num, feedback_data=None):
                     train_data_set[each_name].append((each_sign, each_data_mat))
 
     scaler = process_data.DataScaler(DATA_DIR_PATH)
+
     for model_type in model_names:
         scaler.generate_scale_data(overall_data[model_type], model_type)
         if model_type == 'rnn':
@@ -230,26 +234,6 @@ def pickle_train_data(batch_num, feedback_data=None):
     scaler.expand_scale_data()
     scaler.store_scale_data()
 
-    # curr_data_set_cont = batch_num
-    # if feedback_data is not None:
-    #     train_data_from_feedback = []
-    #     for sign_id in range(len(feedback_data)):
-    #         extracted_data_set = []
-    #         sign_raw_data = feedback_data[sign_id]
-    #
-    #         if len(sign_raw_data) == 0:
-    #             continue
-    #         for each_cap_type in CAP_TYPE_LIST:
-    #             extracted_data_set.append(feature_extract(sign_raw_data, each_cap_type, is_for_cnn)['append_all'])
-    #
-    #         batch_list = append_feature_vector(extracted_data_set)
-    #         for each_data_mat in batch_list:
-    #             train_data_from_feedback.append((sign_id, each_data_mat))
-    #     将feedback的结果追加在后面
-    # train_data = (curr_data_set_cont, train_data, train_data_from_feedback)
-    # else:
-    #     train_data = (curr_data_set_cont, train_data)
-    #
 
     for each_model_type in model_names:
         data_set = train_data_set[each_model_type]
@@ -484,11 +468,8 @@ def process_raw_capture_data(raw_data, for_cnn=False):
     对raw capture data进行特征提取等处理 就像在进行识别前对数据进行处理一样
     将raw capture data直接转换成直接输入算法识别进程的data block
     用于对识别时对输入数据处理情况的还原和模拟 便与调参
-
-
     加入了拓展归一化的功能  对288 窗口的数据进行归一化
     然后再以128的窗口特征提取
-
     :param raw_data: 选择的raw capture data ，load_raw_capture_data()的直接输出
     :param for_cnn
     :return: 返回格式与recognized history data 相同格式的数据
@@ -498,14 +479,12 @@ def process_raw_capture_data(raw_data, for_cnn=False):
     normalized_ptr_end = 160  # (288 - 128 )  = 160
     feat_extract_ptr_start = 0
     feat_extract_ptr_end = 128
-
     normalized_data = {
         'acc': None,
         'gyr': None,
         'emg': None,
     }
     data_scaler = process_data.DataScaler(DATA_DIR_PATH)
-
     start_ptr = 0
     end_ptr = 160
     processed_data = {
@@ -520,19 +499,14 @@ def process_raw_capture_data(raw_data, for_cnn=False):
             gyr_feat = feature_extract_single(raw_data['gyr'][start_ptr:end_ptr, :], 'gyr')
             emg_feat = wavelet_trans(raw_data['emg'][start_ptr:end_ptr, :])
             all_feat = append_single_data_feature(acc_feat[3], gyr_feat[3], emg_feat)
-
         else:
             if end_ptr >= normalized_ptr_end:
                 # print("normalized sector: start ptr %d, end_ptr %d" % (normalized_ptr_start, normalized_ptr_end))
                 type_eumn = ['acc', 'gyr']
-
                 for each_type in type_eumn:
                     data_seg = raw_data[each_type][normalized_ptr_start:normalized_ptr_end, :]
-
-                    # todo 这里选择是否归一化
                     tmp = data_seg
                     tmp = data_scaler.normalize(tmp, 'cnn_' + each_type)
-                    # tmp = normalize(data_seg, threshold, default_scale)
                     if normalized_data[each_type] is None:
                         normalized_data[each_type] = tmp
                     else:
@@ -540,7 +514,6 @@ def process_raw_capture_data(raw_data, for_cnn=False):
                             (normalized_data[each_type], tmp[-16:, :]))
                 normalized_ptr_start += 16
                 normalized_ptr_end += 16
-
             if normalized_ptr_end >= feat_extract_ptr_end:
                 print(
                     "feature extract sector: start ptr %d, end_ptr %d" % (feat_extract_ptr_start, feat_extract_ptr_end))
@@ -557,8 +530,6 @@ def process_raw_capture_data(raw_data, for_cnn=False):
                 feat_extract_ptr_end += extract_step
                 feat_extract_ptr_start += extract_step
                 processed_data['data'].append({'data': all_feat})
-
-
         start_ptr += WINDOW_STEP
         end_ptr += WINDOW_STEP
     return processed_data
@@ -600,21 +571,23 @@ def generate_plot(data_set, data_cap_type, data_feat_type):
             plt.pause(0.008)
         plt.legend(handler_map=handle_lines_map)
 
-def print_train_data(sign_id, batch_num, data_cap_type, data_feat_type, for_cnn=False):
+def print_train_data(sign_id, batch_num, data_cap_type, data_feat_type, capture_date=None, for_cnn=False):
     """
     从采集文件中将 训练用采集数据 绘制折线图
     :param sign_id:
     :param batch_num:
     :param data_cap_type:
     :param data_feat_type:
+    :param capture_date:
     :param for_cnn
     """
-    data_set = load_train_data(sign_id=sign_id, batch_num=batch_num)  # 从采集文件获取数据
+    data_path = 'collected_data'
+    if capture_date is not None:
+        data_path = os.path.join('collect_data_new', capture_date)
 
-    # todo 拟合前切割
-    # if for_cnn:
-    #     data_set = cut_out_data(data_set)
-
+    data_set = load_train_data(sign_id=sign_id,
+                               batch_num=batch_num,
+                               data_path=data_path)  # 从采集文件获取数据
     if data_cap_type == 'emg':
         data_set = process_data.emg_feature_extract(data_set, for_cnn)
     else:
@@ -754,7 +727,6 @@ def generate_verify_vector(model_type):
             verify_vectors[each_sign].append(vector)
             # print('verify cost time %f' % (time.clock() - start))
 
-
     print('show image? y/n')
     is_show = input()
     if is_show == 'y':
@@ -785,18 +757,98 @@ def load_model_param(model, model_type_name):
                 model.eval()
                 return model
 
+GESTURES_TABLE = ['朋友', '家', '回', '去', '迟到', '交流', '联系', '客气', '再见', '劳驾', '谢谢',
+                  '对不起', '没关系', '起来', '帮助', '中国', '时间', '时差', '天', '延期', '早上', '上午',
+                  '中午', '下午', '晚上', '分钟', '小时', '昨天', '今天', '明天', '后天', '你', '什么', '想',
+                  '我', '先生', '女士', '香水', '发胶', '浴液', '手表', '钥匙', '废物', '香烟', '刀', '打火机',
+                  '乡', '吵架', '分开', '社会', '失联', '导游', '参观', '支持', '北京', '辽宁', '沈阳', '世界',
+                  '方向', '位置', '东', '西', '南', '北', '上', '下', '前', '后', '左', '右', '对面', '旁边', '中间',
+                  '这里', '那里', '很', '大家 ', '我们', '同志', '姑娘', '老', '打架', '请问', '为什么', '找',
+                  '不到', '在哪', '怎么走']
+
+NEW_GESTURE_TABLE = ['朋友', '下午', '天', '早上', '上午', '中午', '谢谢', '对不起', '没关系', '昨天', '今天',
+                     '明天', '家', '回', '去', '迟到', '交流', '联系', '你', '什么', '想', '我', '机场', '晚上', '卫生间',
+                     '退', '机票', '着急', '怎么', '办', '行李', '可以', '托运', '起飞', '时间', '错过', '改签',
+                     '航班', '延期', '请问', '怎么走', '在哪里', '找', '不到', '没收', '为什么', '航站楼',
+                     '取票口', '检票口', '身份证', '手表', '钥匙', '香烟', '刀', '打火机', '沈阳', ]
+
+def statistics_data():
+    data_path = os.path.join(DATA_DIR_PATH, 'collect_data_new')
+    date_list = os.listdir(data_path)
+    data_stat_book = {}
+    print('date %s' % str(date_list))
+    for each_date in date_list:
+        path = os.path.join(data_path, each_date)
+        batch_list = os.listdir(path)
+        for each_batch in batch_list:
+            data_files = os.path.join(path, each_batch, 'Emg')
+            data_files = os.listdir(data_files)
+            for each in data_files:
+                each = int(each.split('.')[0])
+                if each < 0:
+                    print(each_date + ' ' + each_batch)
+                if data_stat_book.get(each) is None:
+                    data_stat_book[each] = 1
+                else:
+                    data_stat_book[each] += 1
+    for each in sorted(data_stat_book.keys()):
+        print("sign %d %s, cnt %d" % (each, GESTURES_TABLE[each - 1], data_stat_book[each] * 20))
+    print('sum %d' % (sum(data_stat_book.values()) * 20))
+
+def get_gesture_label_trans_table():
+    # get mapping from old gesture_table to new gesture table
+    map_table = {}
+    for each in range(len(NEW_GESTURE_TABLE)):
+        try:
+            map_table[GESTURES_TABLE.index(NEW_GESTURE_TABLE[each])] = each
+        except ValueError:
+            print("new add label %s" % NEW_GESTURE_TABLE[each])
+
+    for each in range(len(GESTURES_TABLE)):
+        try:
+            NEW_GESTURE_TABLE.index(GESTURES_TABLE[each])
+        except ValueError:
+            print('removed label %s ' % GESTURES_TABLE[each])
+    return map_table
+
+def resort_data():
+    map_table = get_gesture_label_trans_table()
+    data_path = os.path.join(DATA_DIR_PATH, 'collect_data_new')
+    resort_path = os.path.join(DATA_DIR_PATH, 'resort_data')
+    date_list = os.listdir(data_path)
+    # date_list = ['0811-test']
+    for each_date in date_list:
+        path = os.path.join(data_path, each_date)
+        batch_list = os.listdir(path)
+        for each_batch_num in range(len(batch_list)):
+            data_files_path = os.path.join(path, batch_list[each_batch_num])
+            data_files = os.listdir(os.path.join(data_files_path, 'Emg'))
+            for each_data in data_files:
+                for each_type in ['Acceleration', 'Emg', 'Gyroscope']:
+                    old_path = os.path.join(data_files_path, each_type, each_data)
+                    trans_label = map_table[int(each_data.strip('.txt')) - 1]
+                    target_path = os.path.join(resort_path, each_date, str(each_batch_num + 1), each_type)
+                    if not os.path.exists(target_path):
+                        os.makedirs(target_path)
+                    new_path = os.path.join(target_path, '%d.txt' % (trans_label + 1))
+                    shutil.copyfile(old_path, new_path)
 
 
 def main():
     # 从feedback文件获取数据
     # data_set = load_feed_back_data()[sign_id]
 
-    # print_train_data(sign_id=22,
-    #                  batch_num=81,
-    #                  data_cap_type='emg',  # 数据采集类型 emg acc gyr
-    #                  data_feat_type='trans',  # 数据特征类型 zc rms arc trans(emg) poly_fit(cnn)
-    #                  for_cnn=True)  # cnn数据是128长度  db4 4层变换 普通的则是 160 db3 5
+    # statistics_data()
+    # resort_data()
     #
+    print_train_data(sign_id=24,
+                     batch_num=8,
+                     data_cap_type='acc',  # 数据采集类型 emg acc gyr
+                     data_feat_type='poly_fit',  # 数据特征类型 zc rms arc trans(emg) poly_fit(cnn)
+                     capture_date='0811-2',
+                     for_cnn=True)  # cnn数据是128长度  db4 4层变换 普通的则是 160 db3 5
+    #
+
     # 输出上次处理过的数据的scale
     # print_scale('acc', 'all')
 
@@ -804,8 +856,8 @@ def main():
     # pickle_train_data(batch_num=87)
 
     # 生成验证模型的参照系向量
-    generate_verify_vector('rnn')
-    generate_verify_vector('cnn')
+    # generate_verify_vector('rnn')
+    # generate_verify_vector('cnn')
 
     # 从recognized data history中取得数据
     # online_data = load_online_processed_data()
@@ -814,7 +866,11 @@ def main():
     # print_raw_capture_data()
 
     # 从 raw data history中获得data 并处理成能够直接输入到cnn的形式
+    # raw_capture_data = load_raw_capture_data()
     # online_data = process_raw_capture_data(load_raw_capture_data(), for_cnn=True)
+    # plt.figure("111")
+    # plt.plot(range(len(raw_capture_data['emg'])), raw_capture_data['emg'], '.-', )
+    # plt.show()
 
     # 识别能力测试
     # cnn_recognize_test(online_data)
@@ -822,8 +878,8 @@ def main():
     # online data is a tuple(data_single, data_overall)
     # processed_data = split_online_processed_data(online_data)
     # print_processed_online_data(processed_data,
-    #                             cap_type='acc',
-    #                             feat_type='cnn_raw',  # arc zc rms trans  cnn_raw cnn的输入
+    #                             cap_type='emg',
+    #                             feat_type='trans',  # arc zc rms trans  cnn_raw cnn的输入
     #                             overall=True,
     #                             block_cnt=6)
 

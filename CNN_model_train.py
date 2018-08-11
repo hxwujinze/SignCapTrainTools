@@ -122,8 +122,8 @@ for epoch in range(EPOCH + 1):
         accuracy_res += "overall accuracy: %.5f\n" % (all_t_cnt / (all_f_cnt + all_t_cnt))
 
         print("**************************************")
-        print("epoch: %s\nloss: %s\nprogress: %.2f" %
-              (epoch, loss.data.float()[0], 100 * epoch / EPOCH))
+        print("epoch: %s\nloss: %s\nprogress: %.2f lr: %f" %
+              (epoch, loss.data.float()[0], 100 * epoch / EPOCH, LEARNING_RATE))
         print(accuracy_res)
 
 end_time_raw = time.time()
