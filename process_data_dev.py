@@ -15,10 +15,10 @@ from matplotlib.legend_handler import HandlerLine2D
 from torch.autograd import Variable
 
 import process_data
-from CNN_model import CNN, get_max_index
+from models.CNN_model import CNN, get_max_index
+from models.verify_model import SiameseNetwork
 from process_data import feature_extract_single, feature_extract, TYPE_LEN, \
     append_single_data_feature, append_feature_vector, wavelet_trans
-from verify_model import SiameseNetwork
 
 Width_EMG = 9
 Width_ACC = 3
@@ -36,15 +36,23 @@ myfont = font_manager.FontProperties(fname='C:/Windows/Fonts/msyh.ttc')
 mpl.rcParams['axes.unicode_minus'] = False
 
 CAP_TYPE_LIST = ['acc', 'gyr', 'emg']
-# CAP_TYPE_LIST = ['acc', 'gyr', 'emg']
-GESTURES_TABLE = ['肉 ', '鸡蛋 ', '喜欢 ', '您好 ', '你 ', '什么 ', '想 ', '我 ', '很 ', '吃 ',  # 0-9
+
+OLD_GESTURES_TABLE = ['肉 ', '鸡蛋 ', '喜欢 ', '您好 ', '你 ', '什么 ', '想 ', '我 ', '很 ', '吃 ',  # 0-9
                   '老师 ', '发烧 ', '谢谢 ', '', '大家 ', '支持 ', '我们 ', '创新 ', '医生 ', '交流 ',  # 10 - 19
                   '团队 ', '帮助 ', '聋哑人 ', '请 ']  # 20 - 23
+
+GESTURES_TABLE = ['朋友', '下午', '天', '早上', '上午', '中午', '谢谢', '对不起', '没关系', '昨天', '今天',
+                  '明天', '家', '回', '去', '迟到', '交流', '联系', '你', '什么', '想', '我', '机场', '晚上',
+                  '卫生间', '退', '机票', '着急', '怎么', '办', '行李', '可以', '托运', '起飞', '时间', '错过',
+                  '改签', '航班', '延期', '请问', '怎么走', '在哪里', '找', '不到', '没收', '为什么', '航站楼',
+                  '取票口', '检票口', '身份证', '手表', '钥匙', '香烟', '刀', '打火机', '沈阳', '大家',
+                  '支持', '我们', '医生', '帮助', '聋哑人', '', ]
+
 SIGN_COUNT = len(GESTURES_TABLE)
 
 
 # process train data
-def load_train_data(sign_id, batch_num, data_path='collected_data'):
+def load_train_data(sign_id, batch_num, data_path='collected_data', verbose=True):
     """
     从采集文件夹中读取采集数据 并对数据进行裁剪
     读取数据 从文件中读取数据
@@ -90,13 +98,16 @@ def load_train_data(sign_id, batch_num, data_path='collected_data'):
 
         for i in range(start_at, capture_times):
             resize_data_emg = length_adjust(data_emg[index:index + capture_length_book[i], 0:8])
+            if resize_data_emg is None:
+                continue
             processed_data_emg.append(resize_data_emg)  # init
             resize_data_acc = length_adjust(data_acc[index:index + capture_length_book[i], :])
             processed_data_acc.append(resize_data_acc)
             resize_data_gyr = length_adjust(data_gyr[index:index + capture_length_book[i], :])
             processed_data_gyr.append(resize_data_gyr)
             index += capture_length_book[i]
-        print('Load done , batch num: %d, sign id: %d, ' % (batch_num, sign_id,))
+        if verbose:
+            print('Load done , batch num: %d, sign id: %d, ' % (batch_num, sign_id,))
 
     return {
         'emg': processed_data_emg,  # 包含这个手语多次采集的数据矩阵的list
@@ -136,7 +147,7 @@ def length_adjust(data):
     tail_len = len(data) - LENGTH
     if tail_len < 0:
         print('Length Error')
-        adjusted_data = data
+        adjusted_data = None
     else:
         # 前后各去掉多出来长度的一半
         end = len(data) - tail_len / 2
@@ -583,7 +594,7 @@ def print_train_data(sign_id, batch_num, data_cap_type, data_feat_type, capture_
     """
     data_path = 'collected_data'
     if capture_date is not None:
-        data_path = os.path.join('collect_data_new', capture_date)
+        data_path = os.path.join('resort_data', capture_date)
 
     data_set = load_train_data(sign_id=sign_id,
                                batch_num=batch_num,
@@ -757,23 +768,18 @@ def load_model_param(model, model_type_name):
                 model.eval()
                 return model
 
-GESTURES_TABLE = ['朋友', '家', '回', '去', '迟到', '交流', '联系', '客气', '再见', '劳驾', '谢谢',
-                  '对不起', '没关系', '起来', '帮助', '中国', '时间', '时差', '天', '延期', '早上', '上午',
-                  '中午', '下午', '晚上', '分钟', '小时', '昨天', '今天', '明天', '后天', '你', '什么', '想',
-                  '我', '先生', '女士', '香水', '发胶', '浴液', '手表', '钥匙', '废物', '香烟', '刀', '打火机',
-                  '乡', '吵架', '分开', '社会', '失联', '导游', '参观', '支持', '北京', '辽宁', '沈阳', '世界',
-                  '方向', '位置', '东', '西', '南', '北', '上', '下', '前', '后', '左', '右', '对面', '旁边', '中间',
-                  '这里', '那里', '很', '大家 ', '我们', '同志', '姑娘', '老', '打架', '请问', '为什么', '找',
-                  '不到', '在哪', '怎么走']
+# GESTURES_TABLE = ['朋友', '家', '回', '去', '迟到', '交流', '联系', '客气', '再见', '劳驾', '谢谢',
+#                   '对不起', '没关系', '起来', '帮助', '中国', '时间', '时差', '天', '延期', '早上', '上午',
+#                   '中午', '下午', '晚上', '分钟', '小时', '昨天', '今天', '明天', '后天', '你', '什么', '想',
+#                   '我', '先生', '女士', '香水', '发胶', '浴液', '手表', '钥匙', '废物', '香烟', '刀', '打火机',
+#                   '乡', '吵架', '分开', '社会', '失联', '导游', '参观', '支持', '北京', '辽宁', '沈阳', '世界',
+#                   '方向', '位置', '东', '西', '南', '北', '上', '下', '前', '后', '左', '右', '对面', '旁边', '中间',
+#                   '这里', '那里', '很', '大家 ', '我们', '同志', '姑娘', '老', '打架', '请问', '为什么', '找',
+#                   '不到', '在哪', '怎么走']
+NEW_GESTURE_TABLE = []
 
-NEW_GESTURE_TABLE = ['朋友', '下午', '天', '早上', '上午', '中午', '谢谢', '对不起', '没关系', '昨天', '今天',
-                     '明天', '家', '回', '去', '迟到', '交流', '联系', '你', '什么', '想', '我', '机场', '晚上', '卫生间',
-                     '退', '机票', '着急', '怎么', '办', '行李', '可以', '托运', '起飞', '时间', '错过', '改签',
-                     '航班', '延期', '请问', '怎么走', '在哪里', '找', '不到', '没收', '为什么', '航站楼',
-                     '取票口', '检票口', '身份证', '手表', '钥匙', '香烟', '刀', '打火机', '沈阳', ]
-
-def statistics_data():
-    data_path = os.path.join(DATA_DIR_PATH, 'collect_data_new')
+def statistics_data(data_dir_name):
+    data_path = os.path.join(DATA_DIR_PATH, data_dir_name)
     date_list = os.listdir(data_path)
     data_stat_book = {}
     print('date %s' % str(date_list))
@@ -796,6 +802,9 @@ def statistics_data():
     print('sum %d' % (sum(data_stat_book.values()) * 20))
 
 def get_gesture_label_trans_table():
+    global NEW_GESTURE_TABLE
+    if len(NEW_GESTURE_TABLE) == 0:
+        NEW_GESTURE_TABLE = GESTURES_TABLE
     # get mapping from old gesture_table to new gesture table
     map_table = {}
     for each in range(len(NEW_GESTURE_TABLE)):
@@ -811,12 +820,17 @@ def get_gesture_label_trans_table():
             print('removed label %s ' % GESTURES_TABLE[each])
     return map_table
 
-def resort_data():
+def resort_data(date_list=None):
     map_table = get_gesture_label_trans_table()
     data_path = os.path.join(DATA_DIR_PATH, 'collect_data_new')
     resort_path = os.path.join(DATA_DIR_PATH, 'resort_data')
-    date_list = os.listdir(data_path)
-    # date_list = ['0811-test']
+    if date_list is None:
+        print("resort all data?")
+        res = input()
+        if res == 'y':
+            date_list = os.listdir(data_path)
+        else:
+            return
     for each_date in date_list:
         path = os.path.join(data_path, each_date)
         batch_list = os.listdir(path)
@@ -824,29 +838,73 @@ def resort_data():
             data_files_path = os.path.join(path, batch_list[each_batch_num])
             data_files = os.listdir(os.path.join(data_files_path, 'Emg'))
             for each_data in data_files:
+
+                if each_data == '35.txt':
+                    continue
                 for each_type in ['Acceleration', 'Emg', 'Gyroscope']:
                     old_path = os.path.join(data_files_path, each_type, each_data)
-                    trans_label = map_table[int(each_data.strip('.txt')) - 1]
+                    # trans_label = map_table[int(each_data.strip('.txt')) - 1]
                     target_path = os.path.join(resort_path, each_date, str(each_batch_num + 1), each_type)
                     if not os.path.exists(target_path):
                         os.makedirs(target_path)
-                    new_path = os.path.join(target_path, '%d.txt' % (trans_label + 1))
+                    new_path = os.path.join(target_path, each_data)
                     shutil.copyfile(old_path, new_path)
+
+def merge_old_data():
+    global OLD_GESTURES_TABLE
+    OLD_GESTURES_TABLE = [each.strip(' ') for each in OLD_GESTURES_TABLE]
+    trans_table = {}
+    for each_sign in range(len(GESTURES_TABLE)):
+        try:
+            index = OLD_GESTURES_TABLE.index(GESTURES_TABLE[each_sign])
+            trans_table[index] = each_sign
+        except ValueError:
+            continue
+
+    sourece_dir = os.path.join(DATA_DIR_PATH, 'collected_data')
+    target_batch_dir_list = []
+    target_dir_path = os.path.join(DATA_DIR_PATH, 'resort_data')
+    for each_date_dir in sorted(os.listdir(target_dir_path), reverse=True):
+        for each_batch in sorted(os.listdir(os.path.join(target_dir_path, each_date_dir))):
+            target_batch_dir_list.append((each_date_dir, each_batch))
+
+    batch_list = os.listdir(sourece_dir)
+    for each_batch in range(len(batch_list)):
+        data_files_path = os.path.join(sourece_dir, batch_list[each_batch])
+        data_files = os.listdir(os.path.join(data_files_path, 'Emg'))
+
+        for each_data_cap in data_files:
+            each_data_cap_label = int(each_data_cap.strip('.txt')) - 1
+            if trans_table.get(each_data_cap_label) is None:
+                continue
+
+            for each_type in ['Acceleration', 'Emg', 'Gyroscope']:
+                old_path = os.path.join(data_files_path, each_type, each_data_cap)
+                trans_label = trans_table[each_data_cap_label]
+                target_path = os.path.join(target_dir_path,
+                                           target_batch_dir_list[each_batch][0],
+                                           target_batch_dir_list[each_batch][1],
+                                           each_type,
+                                           '%d.txt' % (trans_label + 1))
+                shutil.copyfile(old_path, target_path)
 
 
 def main():
+    # merge_old_data()
+
+
     # 从feedback文件获取数据
     # data_set = load_feed_back_data()[sign_id]
 
-    # statistics_data()
-    # resort_data()
+    statistics_data('resort_data')
+    # resort_data(['0812-1','0812-(时间)录错了','0812-2'])
     #
-    print_train_data(sign_id=24,
-                     batch_num=8,
-                     data_cap_type='acc',  # 数据采集类型 emg acc gyr
-                     data_feat_type='poly_fit',  # 数据特征类型 zc rms arc trans(emg) poly_fit(cnn)
-                     capture_date='0811-2',
-                     for_cnn=True)  # cnn数据是128长度  db4 4层变换 普通的则是 160 db3 5
+    # print_train_data(sign_id=1,
+    #                  batch_num=14,
+    #                  data_cap_type='acc',  # 数据采集类型 emg acc gyr
+    #                  data_feat_type='poly_fit',  # 数据特征类型 zc rms arc trans(emg) poly_fit(cnn)
+    #                  capture_date='0810-2',
+    #                  for_cnn=True)  # cnn数据是128长度  db4 4层变换 普通的则是 160 db3 5
     #
 
     # 输出上次处理过的数据的scale
