@@ -82,6 +82,19 @@ def feature_extract(data_set, type_name):
     }
 
 def feature_extract_single_polyfit(data, compress):
+    """
+    execute the ploy fit smooth and compression on single data mat (acc gyr)
+    nparray ( (dim 1) , (dim 2), (dim 3) )
+    16 points window and 3-order poly fit
+    compress mean take out some point in sequence according to fix length internal,
+    likes down sampling
+
+    :param data: data mat contains three channel data
+    :param compress: compress ratio, the sampling window
+            # 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15  rate = 2
+            # 0   2   4   6   8   10    11    14
+    :return: after fitting data 3 dim, but data len in each dim has changed by compress rate
+    """
     seg_poly_fit = None
     window_range = 16
     start_ptr = 0
@@ -119,9 +132,15 @@ def feature_extract_single_polyfit(data, compress):
 
     return seg_poly_fit
 
-def feature_extract_single(polyfit_data, type_name):
+def feature_extract_single(input_data, type_name):
+    """
+    execute ARC RMS ZC feature extraction in single data mat (acc, gyr)
+    :param input_data:
+    :param type_name:
+    :return:
+    """
     # 对曲线拟合后的数据进行特征提取 效果更好
-    polyfit_data = feature_extract_single_polyfit(polyfit_data, 1)
+    polyfit_data = feature_extract_single_polyfit(input_data, 1)
     window_amount = len(polyfit_data) / WINDOW_SIZE
     windows_data = np.vsplit(polyfit_data, window_amount)
     win_index = 0
@@ -194,10 +213,8 @@ def append_single_data_feature(acc_data, gyr_data, emg_data):
     return batch_mat
 
 # emg data_process
-def emg_feature_extract(data_set, for_cnn):
-    return __emg_feature_extract(data_set, for_cnn)
 
-def __emg_feature_extract(data_set, for_cnn):
+def emg_feature_extract(data_set, for_cnn):
     """
     特征提取
     :param data_set: 来自Load_From_File过程的返回值 一个dict
