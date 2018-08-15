@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 
+
 def train(model: nn.Module,
           model_name: str,
           EPOCH,
@@ -14,6 +15,7 @@ def train(model: nn.Module,
           data_set: dict,
           data_loader: dict,
           save_dir,
+          cuda_mode=False,
           print_inter=50,
           val_inter=100
           ):
@@ -36,6 +38,10 @@ def train(model: nn.Module,
 
     :return:
     """
+    if cuda_mode:
+        model.cuda()
+    else:
+        model.cpu()
     model.train()
     start_time_raw = time.time()
     start_time = time.strftime('%H:%M:%S', time.localtime(start_time_raw))
@@ -49,6 +55,10 @@ def train(model: nn.Module,
         for batch_x, batch_y in data_loader['train']:
             batch_x = Variable(batch_x).cuda()
             batch_y = Variable(batch_y).cuda()
+            if not cuda_mode:
+                batch_x = batch_x.cpu()
+                batch_y = batch_y.cpu()
+
             batch_out = model(batch_x)
             batch_out = torch.squeeze(batch_out)
             loss = loss_func(batch_out, batch_y)
@@ -122,8 +132,7 @@ def train(model: nn.Module,
     info = 'data_set_size:%d\n' % len(data_set['train']) + \
            str(accuracy_res) + \
            'loss: %f\n' % loss.data.float()[0] + \
-           'Epoch: %d\n' % EPOCH \
- \
+           'Epoch: %d\n' % EPOCH
     info += str(model)
 
     file.writelines(info)

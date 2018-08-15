@@ -50,16 +50,19 @@ def feature_extract(data_set, type_name):
     data_set_appended_feat = []
 
     data_set = data_set[type_name]
-    for raw_data in data_set:
+    for raw_data in range(len(data_set)):
+        if raw_data % 100 == 0:
+            print("extraction progress %d / %d" % (raw_data, len(data_set)))
+        raw_data = data_set[raw_data]
         # 一般的特征提取过程
         # rms zc arc polyfit all
-        seg_RMS_feat, seg_ZC_feat, seg_ARC_feat, seg_polyfit_data, seg_all_feat \
-            = feature_extract_single(raw_data, type_name)
+        # seg_RMS_feat, seg_ZC_feat, seg_ARC_feat, seg_polyfit_data, seg_all_feat \
+        #     = feature_extract_single(raw_data, type_name)
         # rnn sector
-        data_set_arc_feat.append(seg_ARC_feat)
-        data_set_rms_feat.append(seg_RMS_feat)
-        data_set_zc_feat.append(seg_ZC_feat)
-        data_set_appended_feat.append(seg_all_feat)
+        # data_set_arc_feat.append(seg_ARC_feat)
+        # data_set_rms_feat.append(seg_RMS_feat)
+        # data_set_zc_feat.append(seg_ZC_feat)
+        # data_set_appended_feat.append(seg_all_feat)
 
         # cnn sector
         # cnn的特征提取过程 只使用曲线拟合特征

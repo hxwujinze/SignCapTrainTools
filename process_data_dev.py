@@ -46,7 +46,8 @@ GESTURES_TABLE = ['朋友', '下午', '天', '早上', '上午', '中午', '谢�
                   '卫生间', '退', '机票', '着急', '怎么', '办', '行李', '可以', '托运', '起飞', '时间', '错过',
                   '改签', '航班', '延期', '请问', '怎么走', '在哪里', '找', '不到', '没收', '为什么', '航站楼',
                   '取票口', '检票口', '身份证', '手表', '钥匙', '香烟', '刀', '打火机', '沈阳', '大家',
-                  '支持', '我们', '医生', '帮助', '聋哑人', '', ]
+                  '支持', '我们', '医生', '帮助', '聋哑人', '', '充电', '寄存', '行李', '中国', '辽宁', '北京',
+                  '世界']
 
 SIGN_COUNT = len(GESTURES_TABLE)
 
@@ -178,6 +179,55 @@ def cut_out_data(data):
         for each_data in range(len(data[each_cap_type])):
             data[each_cap_type][each_data] = data[each_cap_type][each_data][16:144, :]
     return data
+
+
+def pickle_train_data_new():
+    with open(os.path.join(DATA_DIR_PATH, 'cleaned_data.dat'), 'r+b') as f:
+        data_set = pickle.load(f)
+
+    train_data_set = []
+    for each_sign in range(10):
+        print("process sign %d" % each_sign)
+        raw_data_set = data_set[each_sign]
+        raw_data_set = {
+            'acc': data_set[each_sign]['acc'][:300],
+            'gyr': data_set[each_sign]['gyr'][:300],
+            'emg': data_set[each_sign]['emg'][:300]
+        }
+        extracted_data_set = []
+        for each_cap_type in CAP_TYPE_LIST:
+            print("extracting %s" % each_cap_type)
+            if each_cap_type == 'emg':
+                extracted_data_set.append(process_data.emg_feature_extract(raw_data_set, True)['trans'])
+            else:
+                extracted_data_blocks = feature_extract(raw_data_set, each_cap_type)
+                extracted_data_set.append(extracted_data_blocks['poly_fit'])
+        extracted_data_set = append_feature_vector(extracted_data_set)
+        # stack up for normalization
+        overall_data_mat = None
+        for each_mat in extracted_data_set:
+            if overall_data_mat is None:
+                overall_data_mat = each_mat
+            else:
+                overall_data_mat = np.vstack((overall_data_mat, each_mat))
+            # save into train data
+            train_data_set.append((each_mat, each_sign))
+
+    scaler = process_data.DataScaler(DATA_DIR_PATH)
+
+    scaler.generate_scale_data(overall_data_mat, 'cnn')
+    vectors_name = ['cnn_acc', 'cnn_gyr', 'cnn_emg']
+    vectors_range = ((0, 3), (3, 6), (6, 14))
+    scaler.split_scale_vector('cnn', vectors_name, vectors_range)
+
+    scaler.expand_scale_data()
+    scaler.store_scale_data()
+
+    with open(os.path.join(DATA_DIR_PATH, 'new_train_data'), 'w+b') as f:
+        pickle.dump(train_data_set, f)
+
+
+
 
 def pickle_train_data(batch_num, feedback_data=None):
     """
@@ -782,6 +832,9 @@ def statistics_data(data_dir_name):
     data_path = os.path.join(DATA_DIR_PATH, data_dir_name)
     date_list = os.listdir(data_path)
     data_stat_book = {}
+    for each_sign in range(1, len(GESTURES_TABLE) + 1):
+        data_stat_book[each_sign] = 0
+
     print('date %s' % str(date_list))
     for each_date in date_list:
         path = os.path.join(data_path, each_date)
@@ -791,12 +844,8 @@ def statistics_data(data_dir_name):
             data_files = os.listdir(data_files)
             for each in data_files:
                 each = int(each.split('.')[0])
-                if each < 0:
-                    print(each_date + ' ' + each_batch)
-                if data_stat_book.get(each) is None:
-                    data_stat_book[each] = 1
-                else:
-                    data_stat_book[each] += 1
+                data_stat_book[each] += 1
+
     for each in sorted(data_stat_book.keys()):
         print("sign %d %s, cnt %d" % (each, GESTURES_TABLE[each - 1], data_stat_book[each] * 20))
     print('sum %d' % (sum(data_stat_book.values()) * 20))
@@ -831,6 +880,19 @@ def resort_data(date_list=None):
             date_list = os.listdir(data_path)
         else:
             return
+    tmp_date_list = []
+    overall_date_list = os.listdir(data_path)
+    for each_candidate_date in date_list:
+        if each_candidate_date.endswith("*"):
+            each_candidate_date = each_candidate_date.strip('*')
+            for each_overall_date in overall_date_list:
+                if each_overall_date.startswith(each_candidate_date):
+                    tmp_date_list.append(each_overall_date)
+        else:
+            tmp_date_list.append(each_candidate_date)
+
+    date_list = tmp_date_list
+
     for each_date in date_list:
         path = os.path.join(data_path, each_date)
         batch_list = os.listdir(path)
@@ -839,8 +901,8 @@ def resort_data(date_list=None):
             data_files = os.listdir(os.path.join(data_files_path, 'Emg'))
             for each_data in data_files:
 
-                if each_data == '35.txt':
-                    continue
+                # if each_data == '3/5.txt':
+                #     continue
                 for each_type in ['Acceleration', 'Emg', 'Gyroscope']:
                     old_path = os.path.join(data_files_path, each_type, each_data)
                     # trans_label = map_table[int(each_data.strip('.txt')) - 1]
@@ -896,9 +958,10 @@ def main():
     # 从feedback文件获取数据
     # data_set = load_feed_back_data()[sign_id]
 
-    statistics_data('resort_data')
-    # resort_data(['0812-1','0812-(时间)录错了','0812-2'])
-    #
+    # resort_data(['0815-*',])
+    # statistics_data('resort_data')
+
+
     # print_train_data(sign_id=1,
     #                  batch_num=14,
     #                  data_cap_type='acc',  # 数据采集类型 emg acc gyr
@@ -909,6 +972,7 @@ def main():
 
     # 输出上次处理过的数据的scale
     # print_scale('acc', 'all')
+    pickle_train_data_new()
 
     # 将采集数据转换为输入训练程序的数据格式
     # pickle_train_data(batch_num=87)

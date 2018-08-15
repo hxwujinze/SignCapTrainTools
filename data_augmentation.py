@@ -337,10 +337,11 @@ def clean_all_data(date_list=None):
                                                 sign_cnt_cleaned[each_sign]))
     print('all cnt from %d to %d' % (all_cnt, all_cnt_clean))
 
+
 def load_data(sign_id, date_list=None):
     if date_list is None:
         date_list = os.listdir(os.path.join(DATA_DIR_PATH, 'resort_data'))
-    date_list = ['0811-2']
+    # date_list = ['0811-2']
     # date_list.remove('0812-1')
     data = load_train_data(sign_id=sign_id, date=date_list, batch_range=range(1, 99))
     return data
@@ -358,7 +359,7 @@ def clean_data_test(sign_id):
     if data is None:
         print('data count is 0')
         return
-    data_distribution_statistics(True)
+    # data_distribution_statistics(True)
     data = data_clean(sign_id=sign_id, data_batch=data)
     draw_box_plt(data)
     draw_plot(data)
@@ -367,11 +368,13 @@ def main():
     pass
     # read_gesture_table()
     # 存在离群点密集 batch 20    25
-    # data_distribution_statistics(True)
+    data_distribution_statistics(True)
     # clean_all_data()
+    clean_data_test(28)
     # show_data_distribution(13)
     # clean_data_test(58)
-
+    data = load_data(sign_id=28)
+    draw_box_plt(data)
 
 if __name__ == '__main__':
     main()

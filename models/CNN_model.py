@@ -95,6 +95,20 @@ class CNN(nn.Module):
         x = self.out1(x)
         return x
 
+    def exc_train(self):
+        from train_util.common_train import train
+        optimizer = torch.optim.Adam(self.parameters(), 0.001)
+        loss_func = nn.CrossEntropyLoss()
+        lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.1)
+        train(model=self,
+              model_name='cnn_24',
+              EPOCH=100,
+              optimizer=optimizer,
+              exp_lr_scheduler=lr_scheduler,
+              loss_func=loss_func,
+              save_dir='.',
+              )
+
 def get_max_index(tensor):
     # print('置信度')
     # print(tensor.data.float()[0])
