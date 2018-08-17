@@ -15,7 +15,7 @@ from matplotlib.legend_handler import HandlerLine2D
 from torch.autograd import Variable
 
 import process_data
-from models.CNN_model import CNN, get_max_index
+# from models.CNN_model import CNN, get_max_index
 from models.verify_model import SiameseNetwork
 from process_data import feature_extract_single, feature_extract, TYPE_LEN, \
     append_single_data_feature, append_feature_vector, wavelet_trans
@@ -46,7 +46,7 @@ GESTURES_TABLE = ['朋友', '下午', '天', '早上', '上午', '中午', '谢�
                   '卫生间', '退', '机票', '着急', '怎么', '办', '行李', '可以', '托运', '起飞', '时间', '错过',
                   '改签', '航班', '延期', '请问', '怎么走', '在哪里', '找', '不到', '没收', '为什么', '航站楼',
                   '取票口', '检票口', '身份证', '手表', '钥匙', '香烟', '刀', '打火机', '沈阳', '大家',
-                  '支持', '我们', '医生', '帮助', '聋哑人', '', '充电', '寄存', '行李', '中国', '辽宁', '北京',
+                  '支持', '我们', '医生', '帮助', '聋哑人', '', '充电', '寄存', '中国', '辽宁', '北京',
                   '世界']
 
 SIGN_COUNT = len(GESTURES_TABLE)
@@ -74,11 +74,11 @@ def load_train_data(sign_id, batch_num, data_path='collected_data', verbose=True
     # initialization
     path = os.path.join(DATA_DIR_PATH, data_path)
     file_num = sign_id
-    file_emg = path + '\\' + str(batch_num) + '\\Emg\\' + str(file_num) + '.txt'
+    file_emg = os.path.join(path, str(batch_num), 'Emg', str(file_num) + '.txt')
     data_emg = file2matrix(file_emg, Width_EMG)
-    file_acc = path + '\\' + str(batch_num) + '\\Acceleration\\' + str(file_num) + '.txt'
+    file_acc = os.path.join(path, str(batch_num), 'Acceleration', str(file_num) + '.txt')
     data_acc = file2matrix(file_acc, Width_ACC)
-    file_gyr = path + '\\' + str(batch_num) + '\\Gyroscope\\' + str(file_num) + '.txt'
+    file_gyr = os.path.join(path, str(batch_num), 'Gyroscope', str(file_num) + '.txt')
     data_gyr = file2matrix(file_gyr, Width_GYR)
 
     processed_data_emg = []
@@ -186,14 +186,9 @@ def pickle_train_data_new():
         data_set = pickle.load(f)
 
     train_data_set = []
-    for each_sign in range(10):
+    for each_sign in range(len(GESTURES_TABLE)):
         print("process sign %d" % each_sign)
         raw_data_set = data_set[each_sign]
-        raw_data_set = {
-            'acc': data_set[each_sign]['acc'][:300],
-            'gyr': data_set[each_sign]['gyr'][:300],
-            'emg': data_set[each_sign]['emg'][:300]
-        }
         extracted_data_set = []
         for each_cap_type in CAP_TYPE_LIST:
             print("extracting %s" % each_cap_type)
@@ -220,7 +215,7 @@ def pickle_train_data_new():
     vectors_range = ((0, 3), (3, 6), (6, 14))
     scaler.split_scale_vector('cnn', vectors_name, vectors_range)
 
-    scaler.expand_scale_data()
+    # scaler.expand_scale_data()
     scaler.store_scale_data()
 
     with open(os.path.join(DATA_DIR_PATH, 'new_train_data'), 'w+b') as f:
@@ -870,7 +865,13 @@ def get_gesture_label_trans_table():
     return map_table
 
 def resort_data(date_list=None):
-    map_table = get_gesture_label_trans_table()
+    map_table = {
+        '66': '31',
+        '67': '66',
+        '68': '67',
+        '69': '68',
+        '70': '69',
+    }
     data_path = os.path.join(DATA_DIR_PATH, 'collect_data_new')
     resort_path = os.path.join(DATA_DIR_PATH, 'resort_data')
     if date_list is None:
@@ -894,22 +895,22 @@ def resort_data(date_list=None):
     date_list = tmp_date_list
 
     for each_date in date_list:
+        print("resorting date %s" % each_date)
         path = os.path.join(data_path, each_date)
         batch_list = os.listdir(path)
         for each_batch_num in range(len(batch_list)):
             data_files_path = os.path.join(path, batch_list[each_batch_num])
             data_files = os.listdir(os.path.join(data_files_path, 'Emg'))
             for each_data in data_files:
-
-                # if each_data == '3/5.txt':
-                #     continue
                 for each_type in ['Acceleration', 'Emg', 'Gyroscope']:
                     old_path = os.path.join(data_files_path, each_type, each_data)
-                    # trans_label = map_table[int(each_data.strip('.txt')) - 1]
+                    new_label = each_data
+                    # if map_table.get(each_data.strip('.txt')) is not None:
+                    #     new_label = '%s.txt' % map_table[each_data.strip('.txt')]
                     target_path = os.path.join(resort_path, each_date, str(each_batch_num + 1), each_type)
                     if not os.path.exists(target_path):
                         os.makedirs(target_path)
-                    new_path = os.path.join(target_path, each_data)
+                    new_path = os.path.join(target_path, new_label)
                     shutil.copyfile(old_path, new_path)
 
 def merge_old_data():
@@ -958,8 +959,8 @@ def main():
     # 从feedback文件获取数据
     # data_set = load_feed_back_data()[sign_id]
 
-    # resort_data(['0815-*',])
-    # statistics_data('resort_data')
+    # resort_data(['0816-*',])
+    #statistics_data('resort_data')
 
 
     # print_train_data(sign_id=1,
@@ -972,10 +973,11 @@ def main():
 
     # 输出上次处理过的数据的scale
     # print_scale('acc', 'all')
-    pickle_train_data_new()
+    # pickle_train_data_new()
 
     # 将采集数据转换为输入训练程序的数据格式
     # pickle_train_data(batch_num=87)
+    pickle_train_data_new()
 
     # 生成验证模型的参照系向量
     # generate_verify_vector('rnn')

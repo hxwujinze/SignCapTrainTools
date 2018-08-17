@@ -66,7 +66,7 @@ def load_train_data(sign_id, date, batch_range):
     """
     overall_data = None
     for each_date in date:
-        data_path = os.path.join(DATA_DIR_PATH, 'resort_data', each_date)
+        data_path = os.path.join('resort_data', each_date)
         for batch in batch_range:
             batch = int(batch)
             curr_batch_data = process_data_dev.load_train_data(sign_id, batch, data_path, verbose=False)
@@ -318,6 +318,11 @@ def clean_all_data(date_list=None):
         if data is None:
             sign_cnt.append(0)
             sign_cnt_cleaned.append(0)
+            cleaned_data.append({
+                'acc': [],
+                'gyr': [],
+                'emg': []
+            })
             continue
         sign_cnt.append(len(data['acc']))
         data = data_clean(each_sign, data)
@@ -368,13 +373,13 @@ def main():
     pass
     # read_gesture_table()
     # 存在离群点密集 batch 20    25
-    data_distribution_statistics(True)
-    # clean_all_data()
-    clean_data_test(28)
+    # data_distribution_statistics(True)
+    clean_all_data()
+    # clean_data_test(28)
     # show_data_distribution(13)
     # clean_data_test(58)
-    data = load_data(sign_id=28)
-    draw_box_plt(data)
+    # data = load_data(sign_id=28)
+    #draw_box_plt(data)
 
 if __name__ == '__main__':
     main()

@@ -51,6 +51,8 @@ def train(model: nn.Module,
     # epoch: 用所有训练数据跑一遍称为一次epoch
     accuracy_res = ""
     for epoch in range(EPOCH + 1):
+        if epoch % 50 == 0 and epoch != 0:
+            exp_lr_scheduler.step()
 
         for batch_x, batch_y in data_loader['train']:
             batch_x = Variable(batch_x).cuda()
@@ -64,7 +66,7 @@ def train(model: nn.Module,
             loss = loss_func(batch_out, batch_y)
             optimizer.zero_grad()
             loss.backward()
-            optimizer.step(model)
+            optimizer.step()
         if epoch % print_inter == 0:
             print("epoch %d epoch %s" % (epoch, loss.data.float()[0]))
 
@@ -88,17 +90,20 @@ def train(model: nn.Module,
                 test_output = get_max_index(test_output)
                 # softmax是14个概率的输出
                 # test数据是连续的100个输入 于是输出也是一个 100 * 14 的矩阵
-                if test_result.get(test_y[0]) is None:
-                    test_result[test_y[0]] = {
+                target_y = test_y.item()
+                test_output = test_output.item()
+
+                if test_result.get(target_y) is None:
+                    test_result[target_y] = {
                         't': 0,
                         'f': 0
                     }
-                if test_output[0] == test_y[0]:
+                if test_output == target_y:
                     all_t_cnt += 1
-                    test_result[test_y[0]]['t'] += 1
+                    test_result[target_y]['t'] += 1
                 else:
                     all_f_cnt += 1
-                    test_result[test_y[0]]['f'] += 1
+                    test_result[target_y]['f'] += 1
             accuracy_res = "accuracy of each sign:\n"
 
             for each_sign in sorted(test_result.keys()):
