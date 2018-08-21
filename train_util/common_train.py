@@ -122,8 +122,7 @@ def train(model: nn.Module,
     info = 'data_set_size:%d\n' % len(data_set['train']) + \
            str(accuracy_res) + \
            'loss: %f\n' % loss.data.float()[0] + \
-           'Epoch: %d\n' % EPOCH \
- \
+           'Epoch: %d\n' % EPOCH
     info += str(model)
 
     file.writelines(info)

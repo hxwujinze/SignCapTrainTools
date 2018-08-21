@@ -12,7 +12,7 @@ WEIGHT_DECAY = 0.000002
 BATCH_SIZE = 64
 
 class SiameseNetwork(nn.Module):
-    def __init__(self, train=True, model_type='cnn'):
+    def __init__(self, train=True):
         """
         用于生成vector 进行识别结果验证
         :param train: 设置是否为train 模式
@@ -23,103 +23,69 @@ class SiameseNetwork(nn.Module):
             self.status = 'train'
         else:
             self.status = 'eval'
-        self.model_type = model_type
 
-        if model_type == 'cnn':
-            self.LEARNING_RATE = 0.00022
-            self.EPOCH = 800
-            self.coding_model = nn.Sequential(
-                nn.Conv1d(  # 14 x 64
-                    in_channels=14,
-                    out_channels=32,
-                    kernel_size=3,
-                    padding=1,
-                    stride=1,
-                ),  # 32 x 64
-                # 通常插入在激活函数和FC层之间 对神经网络的中间参数进行normalization
-                nn.BatchNorm1d(32),  # 32 x 64
-                nn.LeakyReLU(),
+        self.LEARNING_RATE = 0.00022
+        self.EPOCH = 800
+        self.coding_model = nn.Sequential(
+            nn.Conv1d(  # 14 x 64
+                in_channels=14,
+                out_channels=64,
+                kernel_size=3,
+                padding=1,
+                stride=1,
+            ),  # 32 x 64
+            # 通常插入在激活函数和FC层之间 对神经网络的中间参数进行normalization
+            nn.BatchNorm1d(64),  # 32 x 64
+            nn.LeakyReLU(),
 
-                nn.Conv1d(  # 14 x 64
-                    in_channels=32,
-                    out_channels=32,
-                    kernel_size=3,
-                    padding=1,
-                    stride=1,
-                ),  # 32 x 64
-                # 通常插入在激活函数和FC层之间 对神经网络的中间参数进行normalization
-                nn.BatchNorm1d(32),  # 32 x 64
-                nn.LeakyReLU(),
-                # only one pooling
-                nn.MaxPool1d(kernel_size=3),  # 32 x 21
+            nn.Conv1d(  # 14 x 64
+                in_channels=64,
+                out_channels=64,
+                kernel_size=3,
+                padding=1,
+                stride=1,
+            ),  # 32 x 64
+            # 通常插入在激活函数和FC层之间 对神经网络的中间参数进行normalization
+            nn.BatchNorm1d(64),  # 32 x 64
+            nn.LeakyReLU(),
+            # only one pooling
+            nn.MaxPool1d(kernel_size=3),  # 32 x 21
 
-                nn.Conv1d(
-                    in_channels=32,
-                    out_channels=64,
-                    kernel_size=3,
-                    padding=1,
-                    stride=1
-                ),  # 40 x 21
-                nn.BatchNorm1d(64),  # 40 x 21
-                nn.LeakyReLU(),
+            nn.Conv1d(
+                in_channels=64,
+                out_channels=64,
+                kernel_size=3,
+                padding=1,
+                stride=1
+            ),  # 40 x 21
+            nn.BatchNorm1d(64),  # 40 x 21
+            nn.LeakyReLU(),
 
-                nn.Conv1d(
-                    in_channels=64,
-                    out_channels=64,
-                    kernel_size=3,
-                    padding=1,
-                    stride=1
-                ),  # 40 x 21
-                nn.BatchNorm1d(64),  # 40 x 21
-                nn.LeakyReLU(),
+            nn.Conv1d(
+                in_channels=64,
+                out_channels=64,
+                kernel_size=3,
+                padding=1,
+                stride=1
+            ),  # 40 x 21
+            nn.BatchNorm1d(64),  # 40 x 21
+            nn.LeakyReLU(),
 
-            )
-            self.out = nn.Sequential(
-                nn.Linear(64 * 21, 1024),
-                nn.Dropout(),
-                nn.LeakyReLU(),
-                nn.Linear(1024, 1024),
-                nn.Dropout(),
-                nn.LeakyReLU(),
-                nn.Linear(1024, 256),
-            )
+        )
+        self.out = nn.Sequential(
+            nn.Linear(64 * 21, 1024),
+            nn.Dropout(),
+            nn.LeakyReLU(),
+            nn.Linear(1024, 1024),
+            nn.Dropout(),
+            nn.LeakyReLU(),
+            nn.Linear(1024, 256),
+        )
 
-        elif model_type == 'rnn':
-            self.LEARNING_RATE = 0.0006
-            self.EPOCH = 900
-
-            INPUT_SIZE = 30  # 2 *（3 + 3 + 5） + 8
-            NNet_SIZE = 64
-            NNet_LEVEL = 3
-            NNet_output_size = 64
-
-            self.coding_model = nn.LSTM(
-                input_size=INPUT_SIZE,  # feature's number
-                hidden_size=NNet_SIZE,  # hidden size of rnn layers
-                num_layers=NNet_LEVEL,  # the number of rnn layers
-                batch_first=True,
-                dropout=0.5,
-
-            )
-            self.out = nn.Sequential(
-                nn.LeakyReLU(),
-                nn.Linear(NNet_SIZE, NNet_SIZE),
-                nn.LeakyReLU(),
-                nn.Dropout(),
-                nn.Linear(NNet_SIZE, NNet_SIZE),
-                nn.LeakyReLU(),
-                nn.Dropout(),
-                nn.Linear(NNet_SIZE, NNet_output_size),
-            )
 
     def forward_once(self, x):
-        if self.model_type == 'rnn':
-            # rnn模型有额外的输入
-            lstm_out, h_n_c, = self.coding_model(x)
-            x = lstm_out[:, -1, :]
-        else:  # cnn的情况
-            x = self.coding_model(x)
-            x = x.view(x.size(0), -1)
+        x = self.coding_model(x)
+        x = x.view(x.size(0), -1)
         out = self.out(x)
         return out
 

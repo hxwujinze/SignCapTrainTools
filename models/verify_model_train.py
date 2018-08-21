@@ -3,7 +3,6 @@
 import os
 import pickle
 import random
-import sys
 import time
 
 import numpy as np
@@ -14,9 +13,10 @@ from torch.autograd import Variable
 
 from models.verify_model import SiameseNetwork, ContrastiveLoss, \
     BATCH_SIZE, WEIGHT_DECAY
+from process_data import DataScaler
 
-DATA_DIR_PATH = os.path.join(os.getcwd(), 'data')
-
+# DATA_DIR_PATH = os.path.join(os.getcwd(), 'data')
+DATA_DIR_PATH = os.path.join('..', 'data')
 # 输入数据是个tuple  (label, data)
 class SiameseNetworkTrainDataSet:
     """
@@ -46,7 +46,17 @@ class SiameseNetworkTrainDataSet:
             x2_label = x1_label
             while x2_label == x1_label:
                 x2_label = random.randint(1, self.class_cnt)
+                while self.data_dict.get(x2_label) is None:
+                    x2_label = random.randint(1, self.class_cnt)
             x2_ = random.choice(self.data_dict[x2_label])
+
+        # if get_same:
+        #     x2_ = random.choice(self.data_dict[x1_label])
+        # else:
+        #     x2_label = x1_label
+        #     while x2_label == x1_label:
+        #         x2_label = random.randint(1, self.class_cnt)
+        #     x2_ = random.choice(self.data_dict[x2_label])
         return x1_, \
                x2_, \
                np.array([0 if get_same else 1], dtype=np.float32)
@@ -66,18 +76,22 @@ class SiameseNetworkTrainDataSet:
     def __len__(self):
         return self.data_len
 
-def train(verify_model_type):
+def train():
     # load data
-    f = open(os.path.join(DATA_DIR_PATH, 'data_set_%s' % verify_model_type), 'r+b')
+    f = open(os.path.join(DATA_DIR_PATH, 'new_train_data'), 'r+b')
     raw_data = pickle.load(f)
     f.close()
+    data = []
+    scaler = DataScaler(DATA_DIR_PATH)
+    for each in raw_data:
+        data.append((each[1], scaler.normalize(each[0], 'cnn')))
 
-    try:
-        raw_data = raw_data[1].extend(raw_data[2])
-    except IndexError:
-        raw_data = raw_data[1]
+    # try:
+    #     raw_data = raw_data[1].extend(raw_data[2])
+    # except IndexError:
+    #     raw_data = raw_data[1]
     # train_data => (batch_amount, data_set_emg)
-
+    raw_data = data
     random.shuffle(raw_data)
     input_len = len(raw_data[0][1])
     if input_len == 10:
@@ -94,33 +108,21 @@ def train(verify_model_type):
     print('data_len: %s' % len(raw_data))
     print('each input len: %s' % input_len)
 
-    siamese_data_set = SiameseNetworkTrainDataSet(raw_data)
+    siamese_data_set = SiameseNetworkTrainDataSet(raw_data[:40000])
+    test_data_set = SiameseNetworkTrainDataSet(raw_data[40000:])
+
     # siamese_data_set.look_input_data()
-
-    # split test data
-    test_label = []
-    test_data_x1 = []
-    test_data_x2 = []
-    # last 300
-    for it in range(siamese_data_set.data_len - 300, siamese_data_set.data_len):
-        selected_data = siamese_data_set[it]
-        test_data_x1.append(selected_data[0])
-        test_data_x2.append(selected_data[1])
-        test_label.append(selected_data[2][0])
-
-    test_data_x1 = np.array(test_data_x1, dtype=np.float32)
-    test_data_x2 = np.array(test_data_x2, dtype=np.float32)
-    test_label = np.array(test_label, dtype=np.float32)
-
-    test_data_x1 = torch.from_numpy(test_data_x1)
-    test_data_x2 = torch.from_numpy(test_data_x2)
-    test_label = torch.from_numpy(test_label)
 
     data_loader = Data.DataLoader(siamese_data_set,
                                   shuffle=True,
-                                  batch_size=BATCH_SIZE)
+                                  batch_size=BATCH_SIZE,
+                                  num_workers=2)
+    test_data_loader = Data.DataLoader(test_data_set,
+                                       shuffle=True,
+                                       batch_size=1,
+                                       num_workers=1)
 
-    model = SiameseNetwork(model_type=verify_model_type, train=True)
+    model = SiameseNetwork(train=True)
     model.train()
     model.cuda()
     LEARNING_RATE = model.LEARNING_RATE
@@ -133,12 +135,12 @@ def train(verify_model_type):
     print('start_at: %s' % start_time)
     EPOCH = model.EPOCH
     for epoch in range(EPOCH + 1):
-        if epoch % 100 == 1:
-            LEARNING_RATE -= LEARNING_RATE * 0.15
+        if epoch % 50 == 1:
+            LEARNING_RATE *= 0.15
             optimizer = torch.optim.Adam(model.parameters(),
                                          lr=LEARNING_RATE,
                                          weight_decay=WEIGHT_DECAY)
-
+        loss_his = []
         for x1, x2, label in data_loader:
             x1 = Variable(x1).float().cuda()
             x2 = Variable(x2).float().cuda()
@@ -147,26 +149,32 @@ def train(verify_model_type):
             loss = loss_func(out1, out2, label)
             optimizer.zero_grad()
             loss.backward()
+            loss_his.append(loss.data.float()[0])
             optimizer.step()
+        loss_val = np.mean(np.array(loss_his))
+        print("epoch %d loss %s" % (epoch, str(loss_val)))
 
-        if epoch % 20 == 0:
+        if epoch % 10 == 0:
             model.eval()
-            test_input_x1 = Variable(test_data_x1).cuda()
-            test_input_x2 = Variable(test_data_x2).cuda()
-            # 使用方法就是将数据放入模型 然后将得到的编码与要对比类型的编码
-            # 使用F.pairwise_distance 进行计算 相同的手语一般会小于0.5 不同则会大于2
-
-            test_output = model(test_input_x1, test_input_x2)
-            dissimilarities = F.pairwise_distance(test_output[0], test_output[1])
-            dissimilarities = torch.squeeze(dissimilarities).data
-
             same_arg = []
             diff_arg = []
-            for each in range(len(test_label)):
-                if test_label[each] == 1.0:
-                    diff_arg.append(dissimilarities[each])
-                if test_label[each] == 0.0:
-                    same_arg.append(dissimilarities[each])
+            for test_data_x1, test_data_x2, label in test_data_loader:
+
+                test_input_x1 = Variable(test_data_x1).float().cuda()
+                test_input_x2 = Variable(test_data_x2).float().cuda()
+                # 使用方法就是将数据放入模型 然后将得到的编码与要对比类型的编码
+                # 使用F.pairwise_distance 进行计算 相同的手语一般会小于0.5 不同则会大于2
+
+                test_output = model(test_input_x1, test_input_x2)
+                dissimilarities = F.pairwise_distance(test_output[0], test_output[1])
+                dissimilarities = torch.squeeze(dissimilarities).data[0]
+                label = label[0][0]
+                # print(label)
+                if label == 1.0:
+                    diff_arg.append(dissimilarities)
+                if label == 0.0:
+                    same_arg.append(dissimilarities)
+
             same_arg = np.array(same_arg)
             diff_arg = np.array(diff_arg)
 
@@ -182,7 +190,7 @@ def train(verify_model_type):
             diff_arg = np.mean(diff_arg, axis=-1)
             print("****************************")
             print("epoch: %s\nloss: %s\nprogress: %.2f lr: %f" %
-                  (epoch, loss.data.float()[0], 100 * epoch / EPOCH, LEARNING_RATE))
+                  (epoch, loss_val, 100 * epoch / EPOCH, LEARNING_RATE))
             diff_res = "diff info \n    diff max: %f min: %f, mean: %f var: %f\n " % \
                        (diff_max, diff_min, diff_arg, diff_var) + \
                        "    same max: %f min: %f, mean: %f, same_var %f" % \
@@ -200,11 +208,9 @@ def train(verify_model_type):
     end_time = time.strftime('%m-%d,%H-%M', time.localtime(end_time_raw))
     model.cpu()
     model.eval()
-    torch.save(model.state_dict(), os.path.join(DATA_DIR_PATH, 'verify_model_%s_%s.pkl' %
-                                                (verify_model_type, end_time)))
+    torch.save(model.state_dict(), os.path.join(DATA_DIR_PATH, 'verify_model_%s.pkl' % end_time))
 
-    file = open(os.path.join(DATA_DIR_PATH, 'verify_model_%s_info_%s' %
-                             (verify_model_type, end_time)), 'w')
+    file = open(os.path.join(DATA_DIR_PATH, 'verify_model_%s_info_%s' % end_time), 'w')
 
     info = 'data_size:%d\n' % len(siamese_data_set) + \
            'batch_size:%d\n' % BATCH_SIZE + \
@@ -218,9 +224,9 @@ def train(verify_model_type):
     file.close()
 
 if __name__ == '__main__':
-    try:
-        type_name = sys.argv[1]
-    except IndexError:
-        print("input model manually")
-        type_name = input()
-    train(type_name)
+    # try:
+    #     type_name = sys.argv[1]
+    # except IndexError:
+    #     print("input model manually")
+    #     type_name = input()
+    train()
