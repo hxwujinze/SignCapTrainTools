@@ -25,7 +25,7 @@ class SiameseNetwork(nn.Module):
             self.status = 'eval'
 
         self.LEARNING_RATE = 0.00022
-        self.EPOCH = 800
+        self.EPOCH = 36
         self.coding_model = nn.Sequential(
             nn.Conv1d(  # 14 x 64
                 in_channels=14,
@@ -49,37 +49,36 @@ class SiameseNetwork(nn.Module):
             nn.BatchNorm1d(64),  # 32 x 64
             nn.LeakyReLU(),
             # only one pooling
-            nn.MaxPool1d(kernel_size=3),  # 32 x 21
+            nn.MaxPool1d(kernel_size=3, stride=2),  # 32 x 21
 
             nn.Conv1d(
                 in_channels=64,
-                out_channels=64,
+                out_channels=128,
                 kernel_size=3,
                 padding=1,
                 stride=1
             ),  # 40 x 21
-            nn.BatchNorm1d(64),  # 40 x 21
+            nn.BatchNorm1d(128),  # 40 x 21
             nn.LeakyReLU(),
 
             nn.Conv1d(
-                in_channels=64,
-                out_channels=64,
+                in_channels=128,
+                out_channels=128,
                 kernel_size=3,
                 padding=1,
                 stride=1
             ),  # 40 x 21
-            nn.BatchNorm1d(64),  # 40 x 21
-            nn.LeakyReLU(),
+            nn.BatchNorm1d(128),  # 40 x 21
+            nn.MaxPool1d(kernel_size=3, stride=2)
 
         )
         self.out = nn.Sequential(
-            nn.Linear(64 * 21, 1024),
             nn.Dropout(),
             nn.LeakyReLU(),
-            nn.Linear(1024, 1024),
+            nn.Linear(1920, 1024),
             nn.Dropout(),
             nn.LeakyReLU(),
-            nn.Linear(1024, 256),
+            nn.Linear(1024, 512),
         )
 
 
