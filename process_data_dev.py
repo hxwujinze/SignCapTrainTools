@@ -121,7 +121,7 @@ def file2matrix(filename, data_col_num):
     del_sign = '()[]'
     separator = ','
     try:
-        fr = open(filename, 'r')
+        fr = open(filename, 'r', encoding='utf8')
     except IOError:
         lines_num = 0
         return np.zeros((lines_num, data_col_num), dtype=float)
@@ -627,7 +627,17 @@ def generate_plot(data_set, data_cap_type, data_feat_type):
             plt.pause(0.008)
         plt.legend(handler_map=handle_lines_map)
 
-def print_train_data(sign_id, batch_num, data_cap_type, data_feat_type, capture_date=None, for_cnn=False):
+
+scaler = process_data.DataScaler(DATA_DIR_PATH)
+
+
+def print_train_data(sign_id,
+                     batch_num,
+                     data_cap_type,
+                     data_feat_type,
+                     capture_date=None,
+                     data_path='collected_data',
+                     for_cnn=False):
     """
     从采集文件中将 训练用采集数据 绘制折线图
     :param sign_id:
@@ -635,11 +645,12 @@ def print_train_data(sign_id, batch_num, data_cap_type, data_feat_type, capture_
     :param data_cap_type:
     :param data_feat_type:
     :param capture_date:
+    :param data_path: collect data path
     :param for_cnn
     """
-    data_path = 'collected_data'
     if capture_date is not None:
-        data_path = os.path.join('resort_data', capture_date)
+        # data_path = os.path.join('resort_data', capture_date)
+        data_path = os.path.join(data_path, capture_date)
 
     data_set = load_train_data(sign_id=sign_id,
                                batch_num=batch_num,
@@ -649,7 +660,7 @@ def print_train_data(sign_id, batch_num, data_cap_type, data_feat_type, capture_
     else:
         data_set = feature_extract(data_set, data_cap_type)
 
-    scaler = process_data.DataScaler(DATA_DIR_PATH)
+    global scaler
     to_scale_data = data_set[data_feat_type]
     if for_cnn:
         scale_type_name = 'cnn_%s' % data_cap_type
@@ -828,7 +839,10 @@ def statistics_data(data_dir_name):
     date_list = os.listdir(data_path)
     data_stat_book = {}
     for each_sign in range(1, len(GESTURES_TABLE) + 1):
-        data_stat_book[each_sign] = 0
+        data_stat_book[each_sign] = {
+            'occ_time': 0,
+            'occ_pos': [],
+        }
 
     print('date %s' % str(date_list))
     for each_date in date_list:
@@ -839,11 +853,20 @@ def statistics_data(data_dir_name):
             data_files = os.listdir(data_files)
             for each in data_files:
                 each = int(each.split('.')[0])
-                data_stat_book[each] += 1
+                try:
+                    data_stat_book[each]['occ_time'] += 1
+                    data_stat_book[each]['occ_pos'].append("%s %s" % (each_date, each_batch))
+                except KeyError:
+                    print(each_date, each_batch, each)
 
+    sum_up = 0
     for each in sorted(data_stat_book.keys()):
-        print("sign %d %s, cnt %d" % (each, GESTURES_TABLE[each - 1], data_stat_book[each] * 20))
-    print('sum %d' % (sum(data_stat_book.values()) * 20))
+        print("sign %d %s, cnt %d, occ pos %s" % (each, GESTURES_TABLE[each - 1],
+                                                  data_stat_book[each]['occ_time'] * 20,
+                                                  data_stat_book[each]['occ_pos']))
+        sum_up += data_stat_book[each]['occ_time']
+    print('sum %d' % (sum_up * 20))
+    return data_stat_book
 
 def get_gesture_label_trans_table():
     global NEW_GESTURE_TABLE
@@ -905,8 +928,8 @@ def resort_data(date_list=None):
                 for each_type in ['Acceleration', 'Emg', 'Gyroscope']:
                     old_path = os.path.join(data_files_path, each_type, each_data)
                     new_label = each_data
-                    # if map_table.get(each_data.strip('.txt')) is not None:
-                    #     new_label = '%s.txt' % map_table[each_data.strip('.txt')]
+                    if map_table.get(each_data.strip('.txt')) is not None:
+                        new_label = '%s.txt' % map_table[each_data.strip('.txt')]
                     target_path = os.path.join(resort_path, each_date, str(each_batch_num + 1), each_type)
                     if not os.path.exists(target_path):
                         os.makedirs(target_path)
@@ -924,16 +947,16 @@ def merge_old_data():
         except ValueError:
             continue
 
-    sourece_dir = os.path.join(DATA_DIR_PATH, 'collected_data')
+    source_dir = os.path.join(DATA_DIR_PATH, 'collected_data')
     target_batch_dir_list = []
     target_dir_path = os.path.join(DATA_DIR_PATH, 'resort_data')
     for each_date_dir in sorted(os.listdir(target_dir_path), reverse=True):
         for each_batch in sorted(os.listdir(os.path.join(target_dir_path, each_date_dir))):
             target_batch_dir_list.append((each_date_dir, each_batch))
 
-    batch_list = os.listdir(sourece_dir)
+    batch_list = os.listdir(source_dir)
     for each_batch in range(len(batch_list)):
-        data_files_path = os.path.join(sourece_dir, batch_list[each_batch])
+        data_files_path = os.path.join(source_dir, batch_list[each_batch])
         data_files = os.listdir(os.path.join(data_files_path, 'Emg'))
 
         for each_data_cap in data_files:
@@ -959,17 +982,16 @@ def main():
     # 从feedback文件获取数据
     # data_set = load_feed_back_data()[sign_id]
 
-    # resort_data(['0816-*',])
-    #statistics_data('resort_data')
+    # resort_data(['0817-*',])
+    statistics_data('cleaned_data')
 
-
-    # print_train_data(sign_id=1,
-    #                  batch_num=14,
+    # print_train_data(sign_id=14,
+    #                  batch_num=19,
     #                  data_cap_type='acc',  # 数据采集类型 emg acc gyr
     #                  data_feat_type='poly_fit',  # 数据特征类型 zc rms arc trans(emg) poly_fit(cnn)
-    #                  capture_date='0810-2',
+    #                  capture_date='test',
     #                  for_cnn=True)  # cnn数据是128长度  db4 4层变换 普通的则是 160 db3 5
-    #
+
 
     # 输出上次处理过的数据的scale
     # print_scale('acc', 'all')
@@ -977,7 +999,7 @@ def main():
 
     # 将采集数据转换为输入训练程序的数据格式
     # pickle_train_data(batch_num=87)
-    pickle_train_data_new()
+    # pickle_train_data_new()
 
     # 生成验证模型的参照系向量
     # generate_verify_vector('rnn')

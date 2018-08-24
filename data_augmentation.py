@@ -365,8 +365,8 @@ def clean_data_test(sign_id):
         print('data count is 0')
         return
     # data_distribution_statistics(True)
-    data = data_clean(sign_id=sign_id, data_batch=data)
     draw_box_plt(data)
+    data = data_clean(sign_id=sign_id, data_batch=data)
     draw_plot(data)
 
 def main():
@@ -374,8 +374,8 @@ def main():
     # read_gesture_table()
     # 存在离群点密集 batch 20    25
     # data_distribution_statistics(True)
-    clean_all_data()
-    # clean_data_test(28)
+    # clean_all_data()
+    clean_data_test(31)
     # show_data_distribution(13)
     # clean_data_test(58)
     # data = load_data(sign_id=28)

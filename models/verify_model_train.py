@@ -12,7 +12,7 @@ import torch.nn.functional as F
 import torch.utils.data as Data
 from torch.autograd import Variable
 
-from models.verify_model import SiameseNetwork, ContrastiveLoss, \
+from models.verify_model_new import SiameseNetwork, ContrastiveLoss, \
     BATCH_SIZE, WEIGHT_DECAY
 
 DATA_DIR_PATH = os.path.join(os.getcwd(), 'data')
