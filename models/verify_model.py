@@ -25,7 +25,7 @@ class SiameseNetwork(nn.Module):
             self.status = 'eval'
 
         self.LEARNING_RATE = 0.00022
-        self.EPOCH = 36
+        self.EPOCH = 100
         self.coding_model = nn.Sequential(
             nn.Conv1d(  # 14 x 64
                 in_channels=14,

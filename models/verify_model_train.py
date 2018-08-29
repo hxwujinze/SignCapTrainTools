@@ -3,7 +3,6 @@
 import os
 import pickle
 import random
-import sys
 import time
 
 import numpy as np
@@ -15,10 +14,11 @@ from torch.autograd import Variable
 from models.verify_model import SiameseNetwork, ContrastiveLoss, \
     BATCH_SIZE, WEIGHT_DECAY
 from process_data import DataScaler
+from train_util.data_set import SiameseNetworkTrainDataSet
 
 DATA_DIR_PATH = os.path.join('..', 'data')
 # 输入数据是个tuple  (label, data)
-class SiameseNetworkTrainDataSet:
+class SiameseNetworkTrainDataSet111111:
     """
     生成随机的相同或者不同的数据对进行训练
     """
@@ -108,8 +108,8 @@ def train():
     print('data_len: %s' % len(raw_data))
     print('each input len: %s' % input_len)
 
-    siamese_data_set = SiameseNetworkTrainDataSet(raw_data[:40000])
-    test_data_set = SiameseNetworkTrainDataSet(raw_data[40000:])
+    siamese_data_set = SiameseNetworkTrainDataSet(raw_data[:12000])
+    test_data_set = SiameseNetworkTrainDataSet(raw_data[12000:17000])
 
     # siamese_data_set.look_input_data()
 
@@ -132,7 +132,7 @@ def train():
             model = model_tmp
         else:
             print('cant find last progress')
-        LEARNING_RATE = 0.0000001
+        LEARNING_RATE = 0.000001
     model.train()
     model.cuda()
 
@@ -146,7 +146,7 @@ def train():
     EPOCH = model.EPOCH
     try:
         for epoch in range(EPOCH + 1):
-            if epoch % 10 == 0 and epoch != 0:
+            if epoch % 30 == 0 and epoch != 0:
                 LEARNING_RATE *= 0.1
                 optimizer = torch.optim.Adam(model.parameters(),
                                              lr=LEARNING_RATE,
@@ -252,8 +252,4 @@ def load_model_param(model, model_name):
 
 
 if __name__ == '__main__':
-    try:
-        DATA_DIR_PATH = sys.argv[1]
-    except IndexError:
-        pass
     train()
