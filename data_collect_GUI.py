@@ -5,11 +5,15 @@ import threading
 import time
 
 import Tkinter
+import matplotlib
 import myo
+
+matplotlib.use('TkAgg')
+
 from Tkinter import TOP, LEFT, END
 from myo import VibrationType
 
-DATA_PATH = os.path.join(os.getcwd(), os.path.join('data', 'collect_data_new'))
+DATA_PATH = os.path.join(os.getcwd(), os.path.join('data', 'collect_data_test'))
 TYPE_LIST = ['acc', 'emg', 'gyr']
 GESTURES_TABLE = ['朋友', '下午', '天', '早上', '上午', '中午', '谢谢', '对不起', '没关系', '昨天', '今天',
                   '明天', '家', '回', '去', '迟到', '交流', '联系', '你', '什么', '想', '我', '机场', '晚上',
@@ -75,7 +79,7 @@ class CaptureStore:
             self.curr_capture_sign_data = self.capture_data[-1]
             # 当前手语每次采集的数据
         except IOError:
-            self.capture_batch = next_batch()
+            self.capture_batch = get_max_batch_num()
             self.capture_data = []
             self.curr_capture_sign_data = {
                 'acc': [],
@@ -520,13 +524,13 @@ def main():
         myo_device.set_stream_emg(myo.StreamEmg.enabled)
         wrap_window = Tkinter.Tk()
         wrap_window.title('手语采集')
-        wrap_window.geometry('640x520')
+        wrap_window.geometry('720x720')
         panel = ControlPanel(wrap_window)
         capture_control = CaptureControl(myo_device, panel)
         panel.set_control(capture_control)
 
         t = CaptureThread(capture_control)
-        t.setDaemon(False)
+        t.setDaemon(True)
         t.start()
 
         wrap_window.mainloop()

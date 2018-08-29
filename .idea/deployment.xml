@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" autoUpload="Always" serverName="scarecrow@219.216.72.51:22">
+  <component name="PublishConfigData" serverName="scarecrow@219.216.72.51:22">
     <serverData>
       <paths name="lab_server">
         <serverdata>
@@ -17,6 +17,5 @@
         </serverdata>
       </paths>
     </serverData>
-    <option name="myAutoUpload" value="ALWAYS" />
   </component>
 </project>

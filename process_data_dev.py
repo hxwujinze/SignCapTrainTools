@@ -5,6 +5,7 @@ import pickle
 import random
 import shutil
 import time
+from multiprocessing import Pool
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -667,9 +668,9 @@ def print_train_data(sign_id,
     else:
         scale_type_name = 'rnn_%s_%s' % (data_cap_type, data_feat_type)
 
-    if data_feat_type != 'raw' and data_feat_type != 'trans':
-        for each in range(len(to_scale_data)):
-            to_scale_data[each] = scaler.normalize(to_scale_data[each], scale_type_name)
+    # if data_feat_type != 'raw' and data_feat_type != 'trans':
+    #     for each in range(len(to_scale_data)):
+    #         to_scale_data[each] = scaler.normalize(to_scale_data[each], scale_type_name)
 
     generate_plot(data_set, data_cap_type, data_feat_type)
     plt.show()
@@ -834,7 +835,8 @@ def load_model_param(model, model_type_name):
 #                   '不到', '在哪', '怎么走']
 NEW_GESTURE_TABLE = []
 
-def statistics_data(data_dir_name):
+
+def statistics_data(data_dir_name, show_needing_info=True):
     data_path = os.path.join(DATA_DIR_PATH, data_dir_name)
     date_list = os.listdir(data_path)
     data_stat_book = {}
@@ -843,30 +845,80 @@ def statistics_data(data_dir_name):
             'occ_time': 0,
             'occ_pos': [],
         }
-
     print('date %s' % str(date_list))
+
+    task_list = []
     for each_date in date_list:
         path = os.path.join(data_path, each_date)
         batch_list = os.listdir(path)
         for each_batch in batch_list:
-            data_files = os.path.join(path, each_batch, 'Emg')
-            data_files = os.listdir(data_files)
-            for each in data_files:
-                each = int(each.split('.')[0])
-                try:
-                    data_stat_book[each]['occ_time'] += 1
-                    data_stat_book[each]['occ_pos'].append("%s %s" % (each_date, each_batch))
-                except KeyError:
-                    print(each_date, each_batch, each)
+            task_list.append((path, each_batch, each_date, data_path))
+    p = Pool(7)
+    res = p.map(scan_data, task_list)
+
+    for each_res in res:
+        for each_sign in each_res.keys():
+            data_stat_book[each_sign]['occ_time'] += each_res[each_sign]['occ_time']
+            data_stat_book[each_sign]['occ_pos'] += each_res[each_sign]['occ_pos']
+
+
 
     sum_up = 0
     for each in sorted(data_stat_book.keys()):
         print("sign %d %s, cnt %d, occ pos %s" % (each, GESTURES_TABLE[each - 1],
-                                                  data_stat_book[each]['occ_time'] * 20,
+                                                  data_stat_book[each]['occ_time'],
                                                   data_stat_book[each]['occ_pos']))
         sum_up += data_stat_book[each]['occ_time']
-    print('sum %d' % (sum_up * 20))
+    print('sum %d' % sum_up)
+    if show_needing_info:
+        add_600_list = []
+        add_400_list = []
+        for each in data_stat_book.keys():
+            if data_stat_book[each]['occ_time'] != 0:
+                if data_stat_book[each]['occ_time'] < 200:
+                    add_600_list.append(each)
+                elif data_stat_book[each]['occ_time'] < 500:
+                    add_400_list.append(each)
+
+        print('need 600')
+        for each in add_600_list:
+            print(GESTURES_TABLE[each - 1], end=', ')
+        print('\nneed 400')
+        for each in add_400_list:
+            print(GESTURES_TABLE[each - 1], end=', ')
     return data_stat_book
+
+
+def scan_data(args):
+    path = args[0]
+    each_batch = args[1]
+    each_date = args[2]
+    data_path = args[3]
+
+    data_stat_book = {}
+    data_files = os.path.join(path, each_batch, 'Emg')
+    data_files = os.listdir(data_files)
+    for each_sign in data_files:
+
+        each_sign = int(each_sign.split('.')[0])
+        data = load_train_data(batch_num=int(each_batch),
+                               sign_id=int(each_sign),
+                               data_path=os.path.join(data_path, each_date))
+        try:
+            a = data['acc'][0][0]  # check dim
+            if data_stat_book.get(each_sign) is None:
+                data_stat_book[each_sign] = {
+                    'occ_time': len(data['acc']),
+                    'occ_pos': ["%s %s" % (each_date, each_batch)]
+                }
+            else:
+                data_stat_book[each_sign]['occ_time'] += len(data['acc'])
+                data_stat_book[each_sign]['occ_pos'].append("%s %s" % (each_date, each_batch))
+        except (KeyError, IndexError):
+            print(each_date, each_batch, each_sign)
+    return data_stat_book
+
+
 
 def get_gesture_label_trans_table():
     global NEW_GESTURE_TABLE
@@ -978,20 +1030,19 @@ def merge_old_data():
 def main():
     # merge_old_data()
 
-
     # 从feedback文件获取数据
     # data_set = load_feed_back_data()[sign_id]
 
     # resort_data(['0817-*',])
-    statistics_data('cleaned_data')
+    res = statistics_data('cleaned_data')
 
-    # print_train_data(sign_id=14,
-    #                  batch_num=19,
+    # print_train_data(sign_id=1,
+    #                  batch_num=16,
     #                  data_cap_type='acc',  # 数据采集类型 emg acc gyr
     #                  data_feat_type='poly_fit',  # 数据特征类型 zc rms arc trans(emg) poly_fit(cnn)
-    #                  capture_date='test',
+    #                  capture_date='0810-2',
+    #                  data_path='cleaned_data',
     #                  for_cnn=True)  # cnn数据是128长度  db4 4层变换 普通的则是 160 db3 5
-
 
     # 输出上次处理过的数据的scale
     # print_scale('acc', 'all')
