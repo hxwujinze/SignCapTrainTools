@@ -11,7 +11,7 @@ def main():
     source_dir = 'resort_data'
     source_dir_abs_path = os.path.join(process_data_dev.DATA_DIR_PATH, source_dir)
     stat_book = process_data_dev.statistics_data(source_dir)
-    target_dir_abs_path = os.path.join(process_data_dev.DATA_DIR_PATH, 'cleaned_data')
+    target_dir_abs_path = os.path.join(process_data_dev.DATA_DIR_PATH, 'cleaned_data_test')
     if not os.path.exists(target_dir_abs_path):
         os.makedirs(target_dir_abs_path)
 
@@ -23,7 +23,7 @@ def main():
 
     print(json.dumps(scanned_book, indent=2))
 
-    for each_sign in [44]:  # , 24, 27 , 31, 34]:
+    for each_sign in [26]:  # , 24, 27 , 31, 34]:
         for each_batch in stat_book[each_sign]['occ_pos']:
             try:
                 scanned_book[each_sign].index(each_batch)
@@ -81,6 +81,8 @@ def main():
                     if not os.path.exists(target_path):
                         os.makedirs(target_path)
                     new_path = os.path.join(target_path, str(each_sign) + '.txt')
+                    if os.path.exists(new_path):
+                        print("%s %s %s" % (date, batch_id, each_sign))
                     shutil.copyfile(old_path, new_path)
 
             with open(scanned_book_f, 'w+b') as f:

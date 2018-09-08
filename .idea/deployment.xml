@@ -1,18 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" serverName="scarecrow@219.216.72.51:22">
+  <component name="PublishConfigData" serverName="lab" showDialogOnRemoteDnD="false">
     <serverData>
-      <paths name="lab_server">
+      <paths name="lab">
         <serverdata>
           <mappings>
             <mapping local="$PROJECT_DIR$" web="/" />
-          </mappings>
-        </serverdata>
-      </paths>
-      <paths name="scarecrow@219.216.72.51:22">
-        <serverdata>
-          <mappings>
-            <mapping deploy="/tmp/pycharm_project_637" local="$PROJECT_DIR$" />
           </mappings>
         </serverdata>
       </paths>

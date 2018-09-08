@@ -27,7 +27,7 @@ Width_GYR = 3
 LENGTH = 160
 
 WINDOW_STEP = 16
-
+torch.nn.RReLU
 EMG_WINDOW_SIZE = 3
 FEATURE_LENGTH = 44
 
@@ -877,7 +877,7 @@ def statistics_data(data_dir_name, show_needing_info=True):
             if data_stat_book[each]['occ_time'] != 0:
                 if data_stat_book[each]['occ_time'] < 200:
                     add_600_list.append(each)
-                elif data_stat_book[each]['occ_time'] < 500:
+                elif data_stat_book[each]['occ_time'] < 400:
                     add_400_list.append(each)
 
         print('need 600')
@@ -1034,15 +1034,20 @@ def main():
     # data_set = load_feed_back_data()[sign_id]
 
     # resort_data(['0817-*',])
-    res = statistics_data('cleaned_data')
-
-    # print_train_data(sign_id=1,
-    #                  batch_num=16,
-    #                  data_cap_type='acc',  # 数据采集类型 emg acc gyr
-    #                  data_feat_type='poly_fit',  # 数据特征类型 zc rms arc trans(emg) poly_fit(cnn)
-    #                  capture_date='0810-2',
-    #                  data_path='cleaned_data',
-    #                  for_cnn=True)  # cnn数据是128长度  db4 4层变换 普通的则是 160 db3 5
+    # res = statistics_data('cleaned_data')
+    # sign 3 天, cnt 656, occ pos ['0810-2 12', '0810-2 13', '0810-2 14', '0810-2 21', '0810-2 23',
+    # '0811-1 15',
+    #  '0811-1 16', '0811-1 17', '0811-1 2', '0811-1 9', '0811-2 18', '0811-2 2', '0811-2 22',
+    # '0811-2 23', '0811-2 25', '0811-2 26', '0811-2 27', '0811-2 3', '0811-2 4', '0811-2 5',
+    # '0811-2 9', '0812-1 21', '0812-1 22', '0812-1 23', '0812-1 24', '0812-1 25', '0812-1 26',
+    #  '0812-1 27', '0812-1 28', '0812-1 29', '0813-2 10', '0813-3 7']
+    print_train_data(sign_id=3,
+                     batch_num=25,
+                     data_cap_type='acc',  # 数据采集类型 emg acc gyr
+                     data_feat_type='poly_fit',  # 数据特征类型 zc rms arc trans(emg) poly_fit(cnn)
+                     capture_date='0812-1',
+                     data_path='cleaned_data',
+                     for_cnn=True)  # cnn数据是128长度  db4 4层变换 普通的则是 160 db3 5
 
     # 输出上次处理过的数据的scale
     # print_scale('acc', 'all')
