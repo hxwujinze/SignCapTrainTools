@@ -1,13 +1,13 @@
 # Siamese-Networks
-
-import os
+import math
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from . import CNN_model
+# from .make_resnet import my_resnet
+from .make_VGG import make_vgg
 
 # CNN: input len -> output len
 # Lout=floor((Lin+2∗padding−dilation∗(kernel_size−1)−1)/stride+1)
@@ -15,45 +15,52 @@ from . import CNN_model
 
 WEIGHT_DECAY = 0.000002
 BATCH_SIZE = 64
-LEARNING_RATE = 0.0001
-EPOCH = 200
+LEARNING_RATE = 0.0003
+EPOCH = 250
 
 
 class SiameseNetwork(nn.Module):
-    def __init__(self, encode_model_path, transfer_style: bool, train=True):
+    def __init__(self, train=True):
         """
         用于生成vector 进行识别结果验证
         :param train: 设置是否为train 模式
+        :param model_type: 设置验证神经网络的模型种类 有rnn 和cnn两种
         """
         nn.Module.__init__(self)
-        self.encode_model = CNN_model.CNN()
-        self.encode_model.load_params(encode_model_path)
-        self.encode_model.set_encode_mode(True)
-        self.is_transfer_style = transfer_style
-
         if train:
-            self.work_mode = 'train'
-            if transfer_style:
-                self.encode_model.eval()
-            else:
-                self.encode_model.train()
+            self.status = 'train'
         else:
-            self.work_mode = 'eval'
-            self.eval()
+            self.status = 'eval'
 
-        self.out = nn.Sequential(
+        # self.coding_model = my_resnet(layers=[2 ,2], layer_planes=[64, 128])
+        # self.coding_model = load_model_from_classify()
+        self.coding_model = make_vgg(input_chnl=14, layers=[2, 3], layers_chnl=[64, 128])
+
+        self.out = torch.nn.Sequential(
             nn.LeakyReLU(),
-            nn.Linear(1920, 1024),
+            nn.Linear(256, 128),
             nn.LeakyReLU(),
-            nn.Dropout(),
-            nn.Linear(1024, 512),
-            nn.Tanh(),
-            nn.Dropout(),
-            nn.Linear(512, 512),
+            nn.Linear(128, 128),
         )
 
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv1d):
+                n = m.kernel_size[0] * m.out_channels
+                m.weight.data.normal_(0, math.sqrt(2. / n))
+                if m.bias is not None:
+                    m.bias.data.zero_()
+            elif isinstance(m, nn.BatchNorm1d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+            elif isinstance(m, nn.Linear):
+                m.weight.data.normal_(0, 0.01)
+                m.bias.data.zero_()
+
     def forward_once(self, x):
-        x = self.encod_model(x)
+        x = self.coding_model(x)
         out = self.out(x)
         return out
 
@@ -62,32 +69,40 @@ class SiameseNetwork(nn.Module):
         train 模式输出两个vector 进行对比
         eval 模式输出一个vector
         """
-        if self.work_mode == 'train':
+        if self.status == 'train':
             out1 = self.forward_once(xs[0])
             out2 = self.forward_once(xs[1])
             return out1, out2
         else:
             return self.forward_once(xs[0])
 
+    def train(self, mode=True):
+        nn.Module.train(self, mode)
+        self.status = 'train'
+
+    def single_output(self):
+        self.status = 'eval'
+
     def exc_train(self):
         # only import train staff in training env
         from train_util.data_set import generate_data_set, SiameseNetworkTrainDataSet
         from train_util.common_train import train
         from torch.utils.data import dataloader as DataLoader
+        print("verify model start training")
+        print(str(self))
 
         optimizer = torch.optim.Adam(self.parameters(), lr=LEARNING_RATE)
-        loss_func = nn.CrossEntropyLoss()
-        lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.1)
-        data_set = generate_data_set(0.1, SiameseNetworkTrainDataSet)
+        loss_func = ContrastiveLoss()
+        lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=0.1)
+        data_set = generate_data_set(0.06, SiameseNetworkTrainDataSet)
         data_loader = {
             'train': DataLoader.DataLoader(data_set['train'],
                                            shuffle=True,
                                            batch_size=BATCH_SIZE,
-                                           num_workers=3),
+                                           num_workers=1),
             'test': DataLoader.DataLoader(data_set['test'],
                                           shuffle=True,
-                                          batch_size=1,
-                                          num_workers=2)
+                                          batch_size=1, )
         }
         train(model=self,
               model_name='verify_68',
@@ -95,33 +110,15 @@ class SiameseNetwork(nn.Module):
               optimizer=optimizer,
               exp_lr_scheduler=lr_scheduler,
               loss_func=loss_func,
-              save_dir='.',
+              save_dir='./params',
               data_set=data_set,
               data_loader=data_loader,
               test_result_output_func=test_result_output,
               cuda_mode=1,
               print_inter=2,
-              val_inter=50,
+              val_inter=25,
               scheduler_step_inter=50
               )
-
-    def load_params(self, path):
-        file_list = os.listdir(path)
-        target = None
-        for each in file_list:
-            if each.startswith("verify_68"):
-                target = each
-                break
-        if target is None:
-            raise Exception("can't find satisfy model params")
-
-        target = os.path.join(path, target)
-        # only load tail part
-        if self.is_transfer_style:
-            self.out.load_state_dict(torch.load(target))
-        # load whole part
-        else:
-            self.load_state_dict(torch.load(target))
 
 
 def test_result_output(result_list, epoch, loss):
@@ -143,22 +140,31 @@ def test_result_output(result_list, epoch, loss):
 
     diff_min = np.min(diff_arg)
     diff_max = np.max(diff_arg)
-    diff_var = np.var(diff_arg)[0]
+    diff_var = np.var(diff_arg)
+    diff_1st = np.percentile(diff_arg, 10)
+    diff_med = np.percentile(diff_arg, 50)
+    diff_2nd = np.percentile(diff_arg, 90)
 
     same_max = np.max(same_arg)
     same_min = np.min(same_arg)
-    same_var = np.var(same_arg)[0]
+    same_var = np.var(same_arg)
+    same_1st = np.percentile(same_arg, 10)
+    same_med = np.percentile(same_arg, 50)
+    same_2nd = np.percentile(same_arg, 90)
 
-    same_arg = np.mean(same_arg, axis=-1)[0]
-    diff_arg = np.mean(diff_arg, axis=-1)[0]
-    print("****************************")
-    print("epoch: %s\nloss: %s\nprogress: %.2f lr: %f" %
-          (epoch, loss.data.float()[0], 100 * epoch / EPOCH, LEARNING_RATE))
-    diff_res = "diff info \n    diff max: %f min: %f, mean: %f var: %f\n " % \
-               (diff_max, diff_min, diff_arg, diff_var) + \
-               "    same max: %f min: %f, mean: %f, same_var %f" % \
-               (same_max, same_min, same_arg, same_var)
+    same_arg = np.mean(same_arg, axis=-1)
+    diff_arg = np.mean(diff_arg, axis=-1)
+    diff_res = "****************************"
+    diff_res += "epoch: %s\nloss: %s\nprogress: %.2f lr: %f\n" % \
+                (epoch, loss, 100 * epoch / EPOCH, LEARNING_RATE)
+    diff_res += "diff info \n    max: %f min: %f, mean: %f var: %f\n " % \
+                (diff_max, diff_min, diff_arg, diff_var) \
+                + "    1st: %f med: %f 2nd: %f\n" % (diff_1st, diff_med, diff_2nd) \
+                + "same info\n    max: %f min: %f, mean: %f, same_var %f\n" % \
+                (same_max, same_min, same_arg, same_var) \
+                + "    1st: %f med: %f 2nd: %f" % (same_1st, same_med, same_2nd)
     print(diff_res)
+    return diff_res
 
 
 class ContrastiveLoss(torch.nn.Module):

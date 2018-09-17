@@ -2,8 +2,16 @@
 <project version="4">
   <component name="WebServers">
     <option name="servers">
-      <webServer id="ff9035bc-fb49-452c-8107-270b00313c3e" name="lab" url="http://219.216.72.51">
-        <fileTransfer host="219.216.72.51" port="22" rootFolder="/home/scarecrow/train_pakage" accessType="SFTP">
+      <webServer id="ff9035bc-fb49-452c-8107-270b00313c3e" name="lab" url="http://219.216.72.230">
+        <fileTransfer host="219.216.72.230" port="22" rootFolder="/home/scarecrow/train_pakage" accessType="SFTP">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" shareSSLContext="true" />
+          </advancedOptions>
+          <option name="port" value="22" />
+        </fileTransfer>
+      </webServer>
+      <webServer id="271f70b0-d353-4a42-b7a0-c2a8e0796dba" name="tecent_cloud" url="http://123.207.141.36">
+        <fileTransfer host="123.207.141.36" port="22" rootFolder="/home/ubuntu/train_pakage/SignTrainEnvOnGPUServer" accessType="SFTP">
           <advancedOptions>
             <advancedOptions dataProtectionLevel="Private" shareSSLContext="true" />
           </advancedOptions>

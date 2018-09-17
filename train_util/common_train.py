@@ -1,9 +1,10 @@
 import os
 import time
 
+import numpy as np
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
+from torch.utils.data import dataloader as DataLoader
 
 
 def train(model: nn.Module,
@@ -44,12 +45,11 @@ def train(model: nn.Module,
 
     :return:
     """
-    if cuda_mode:
+    if cuda_mode is not None:
         torch.cuda.set_device(cuda_mode)
         model.cuda(cuda_mode)
     else:
         model.cpu()
-    model.train()
     start_time_raw = time.time()
     start_time = time.strftime('%H:%M:%S', time.localtime(start_time_raw))
     print('start_at: %s' % start_time)
@@ -57,41 +57,56 @@ def train(model: nn.Module,
     # start training
     # epoch: 用所有训练数据跑一遍称为一次epoch
     accuracy_res = ""
+    curr_step_inter = scheduler_step_inter
     try:
         for epoch in range(EPOCH + 1):
-            if epoch % scheduler_step_inter == 0 and epoch != 0:
+            loss_his = []
+            if epoch % curr_step_inter == 0 and epoch != 0:
+                curr_step_inter = int(curr_step_inter * 1.5)
                 exp_lr_scheduler.step()
+            if (epoch % int(scheduler_step_inter * 2)) == 0 and \
+                    epoch != 0 and data_loader['train'].batch_size < 512:
+                data_loader['train'] = DataLoader.DataLoader(data_loader['train'].dataset,
+                                                             shuffle=True,
+                                                             batch_size=data_loader['train'].batch_size * 2,
+                                                             num_workers=1)
+
 
             for batch_x, batch_y in data_loader['train']:
-
                 if model_name.startswith("cnn"):
-                    batch_x = Variable(batch_x).cpu()
+                    batch_x = batch_x.cpu()
                 else:
-                    batch_x = (Variable(each).cpu for each in batch_x)
-                batch_y = Variable(batch_y).cpu()
+                    batch_x = [each.cpu() for each in batch_x]
+                batch_y = batch_y.cpu()
+
 
                 if cuda_mode is not None:
                     if model_name.startswith("cnn"):
-                        batch_x = Variable(batch_x).cuda()
-                    else:
                         batch_x = batch_x.cuda()
+                    else:
+                        batch_x = [each.cuda() for each in batch_x]
                     batch_y = batch_y.cuda()
+
                 # in the siamese train mode ,
                 # it may come two output, two input, so need to wrap them in tuple/list
-
                 if model_name.startswith("cnn"):
                     batch_out = model(batch_x)
+                    batch_out = torch.squeeze(batch_out)
+                    loss = loss_func(batch_out, batch_y)
                 else:
                     batch_out = model(*batch_x)
+                    batch_y = batch_y.float()
+                    loss = loss_func(batch_out[0], batch_out[1], batch_y)
 
-                batch_out = torch.squeeze(batch_out)
-                loss = loss_func(batch_out, batch_y)
+                loss_his.append(loss.item())
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
 
+            loss_val = np.mean(np.array(loss_his))
+
             if epoch % print_inter == 0:
-                print("epoch %d epoch %s" % (epoch, loss.data.float()[0]))
+                print("epoch %d loss %s" % (epoch, loss_val))
 
             if epoch % val_inter == 0:
 
@@ -99,24 +114,23 @@ def train(model: nn.Module,
                 model.eval()
                 model.cpu()
                 # 转换为求值模式
-
                 test_result_list = []
                 for test_x, target_y in data_loader['test']:
                     if model_name.startswith("cnn"):
-                        test_x = Variable(test_x).cpu()
+                        test_x = test_x.cpu()
                     else:
-                        test_x = (Variable(each).cpu() for each in test_x)
-                    target_y = Variable(target_y).cpu()
-
+                        test_x = [each.cpu() for each in test_x]
+                    target_y = target_y.cpu()
                     if model_name.startswith("cnn"):
                         test_output = model(test_x).cpu()
                     else:
-                        test_output = model(*test_x).cpu()
+                        test_output = model(*test_x)
 
                     # in cnn model get max probability category label and ground-truth label
                     # in verify model get dissimilarities ground-truth result
 
                     # only classify mode need max index
+
                     if model_name.startswith("cnn"):
                         test_output = get_max_index(test_output)
                         test_output = test_output.item()
@@ -124,9 +138,10 @@ def train(model: nn.Module,
                     target_y = target_y.item()  # new style of get value in tensor
                     test_result_list.append((target_y, test_output))
 
-                test_result_output_func(test_result_list, epoch=epoch, loss=loss)
+                accuracy_res = test_result_output_func(test_result_list, epoch=epoch, loss=loss_val)
                 model.train()
-                model.cuda()
+                if cuda_mode is not None:
+                    model.cuda()
 
     except KeyboardInterrupt:
         print("stop train\n save model ?")
@@ -149,13 +164,12 @@ def train(model: nn.Module,
     file = open(os.path.join(save_dir, '%s_models_info_%s.txt' % (model_name, end_time)), 'w')
     info = 'data_set_size:%d\n' % len(data_set['train']) + \
            str(accuracy_res) + \
-           'loss: %f\n' % loss.data.float()[0] + \
+           'loss: %f\n' % loss_val + \
            'Epoch: %d\n' % EPOCH
     info += str(model)
 
     file.writelines(info)
     file.close()
-
 
 def get_max_index(tensor):
     # print('置信度')
