@@ -1106,13 +1106,13 @@ def main():
     # data_set = load_feed_back_data()[sign_id]
 
     # resort_data(['0817-*',])
-    # res = statistics_data('cleaned_data')
+    # res = statistics_data('resort_data')
     print_train_data(sign_id=27,
-                     batch_num=16,
+                     batch_num=20,
                      data_cap_type='acc',  # 数据采集类型 emg acc gyr
                      data_feat_type='poly_fit',  # 数据特征类型 zc rms arc trans(emg) poly_fit(cnn)
                      capture_date='0815-1',
-                     data_path='cleaned_data',
+                     data_path='resort_data',
                      for_cnn=True)  # cnn数据是128长度  db4 4层变换 普通的则是 160 db3 5
 
     # 输出上次处理过的数据的scale
@@ -1121,27 +1121,27 @@ def main():
 
     # 将采集数据转换为输入训练程序的数据格式
     # pickle_train_data(batch_num=87)
-    # pickle_train_data_new()
+    pickle_train_data_new()
 
     # 生成验证模型的参照系向量
     # generate_verify_vector('rnn')
     # generate_verify_vector('cnn')
 
     # 从recognized data history中取得数据
-    online_data = load_online_processed_data()
+    # online_data = load_online_processed_data()
 
     # plot 原始采集的数据
-    print_raw_capture_data()
+    # print_raw_capture_data()
 
     # 从 raw data history中获得data 并处理成能够直接输入到cnn的形式
-    raw_capture_data = load_raw_capture_data()
-    online_data = process_raw_capture_data(load_raw_capture_data(), for_cnn=True)
+    # raw_capture_data = load_raw_capture_data()
+    # online_data = process_raw_capture_data(load_raw_capture_data(), for_cnn=True)
     # plt.figure("111")
     # plt.plot(range(len(raw_capture_data['emg'])), raw_capture_data['emg'], '.-', )
     # plt.show()
 
     # 识别能力测试
-    cnn_recognize_test(online_data)
+    # cnn_recognize_test(online_data)
 
     # online data is a tuple(data_single, data_overall)
     # processed_data = split_online_processed_data(online_data)

@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # from .make_resnet import my_resnet
-from .make_VGG import make_vgg
+from algorithm_models.make_VGG import make_vgg
 
 # CNN: input len -> output len
 # Lout=floor((Lin+2∗padding−dilation∗(kernel_size−1)−1)/stride+1)
@@ -65,16 +65,13 @@ class SiameseNetwork(nn.Module):
         return out
 
     def forward(self, *xs):
-        """
-        train 模式输出两个vector 进行对比
-        eval 模式输出一个vector
-        """
-        if self.status == 'train':
-            out1 = self.forward_once(xs[0])
-            out2 = self.forward_once(xs[1])
-            return out1, out2
+        outs = []
+        for each in xs:
+            outs.append(self.forward_once(each))
+        if len(outs) != 1:
+            return tuple(outs)
         else:
-            return self.forward_once(xs[0])
+            return outs[0]
 
     def train(self, mode=True):
         nn.Module.train(self, mode)
@@ -94,7 +91,7 @@ class SiameseNetwork(nn.Module):
         optimizer = torch.optim.Adam(self.parameters(), lr=LEARNING_RATE)
         loss_func = ContrastiveLoss()
         lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=0.1)
-        data_set = generate_data_set(0.06, SiameseNetworkTrainDataSet)
+        data_set = generate_data_set(0.06, SiameseNetworkTrainDataSet, 16)
         data_loader = {
             'train': DataLoader.DataLoader(data_set['train'],
                                            shuffle=True,
@@ -183,3 +180,144 @@ class ContrastiveLoss(torch.nn.Module):
                                       label * torch.pow(torch.clamp(self.margin - euclidean_distance,
                                                                     min=0.0), 2))
         return loss_contrastive
+
+
+class WeightBasedTripleLoss(nn.Module):
+
+    def __init__(self, batch_k, margin=2.0):
+        super(WeightBasedTripleLoss, self).__init__()
+        self.sampling_layer = WeightSamplingLayer(batch_k)
+
+    def forward(self, x):
+        a_s, p_s, n_s = self.sampling_layer(x)
+        loss = F.triplet_margin_loss(anchor=a_s, positive=p_s, negative=n_s)
+        return loss
+
+
+class WeightSamplingLayer:
+    def __init__(self, batch_k, nonzero_loss_cutoff=1.4, maximum_cutoff=0.5):
+        self.n = None
+        self.d = None
+        self.k = batch_k
+        self.nonzero_loss_cutoff = nonzero_loss_cutoff
+        self.maximum_cutoff = maximum_cutoff
+
+    def __call__(self, x):
+        """
+        execute sampling according to the distance
+        make sure the dtype is double, otherwise many the calculate error will accumulate
+        :param x: 2D array (vectors, data in dim)
+        :return: 3 2D tensor, contains anchor vector, positive vector, negative vector
+        """
+        # L2Normalize
+        init_vectors = x
+        x = WeightSamplingLayer.L2Normalize(x)
+        self.n, self.d = x.shape
+        # calculate distance
+        distance = WeightSamplingLayer.get_distance(x)
+        # mapping to distribution
+        weights = self.calculate_weight(distance)
+        # execute sampling
+        return self.sampling(init_vectors, weights)
+        # return triplets
+
+    @staticmethod
+    def L2Normalize(data):
+        data = data.numpy()
+        ret = None
+        for i in range(len(data)):
+            col = data[i,]
+            col = col / (np.sqrt(np.sum(col ** 2)) + 0.00001)
+            if ret is None:
+                ret = col
+            else:
+                ret = np.vstack((ret, col))
+        ret = torch.from_numpy(ret)
+        return ret
+
+    @staticmethod
+    def get_distance(data):
+        data = data.numpy()
+        n = data.shape[0]
+        square = np.sum(data ** 2.0, axis=1, keepdims=True)
+        # print('square %s' % str(square))
+        distance_square = square + square.T - (2.0 * np.dot(data, data.T))
+        # print('distance_square %s' % str(distance_square))
+        # Adding identity to make sqrt work.
+        res = np.sqrt(distance_square + np.identity(n))
+        return torch.from_numpy(res)
+
+    def calculate_weight(self, distance):
+        distance = distance.numpy()
+        log_weights = ((2.0 - float(self.d)) * np.log(distance)
+                       - (float(self.d - 3) / 2) * np.log(1.0 - 0.25 * (distance ** 2.0)))
+        # use formula trans get the distribution score, according that score we use it as
+        # the simulating distribution for sample the (a, p, n) triplet
+        # print("log_weights %s" % str(log_weights))
+
+        weights = np.exp(log_weights - np.max(log_weights))
+        # use the softmax-like exp transform the score to the probabilities
+        # Sample only negative examples by setting weights of
+        # the same-class examples to 0.
+
+        mask = np.ones(weights.shape)
+        k = self.k
+        for i in range(0, self.n, k):
+            mask[i:i + k, i:i + k] = 0
+        # print("weights before norm\n%s" % str(weights))
+        weights = weights * np.array(mask) * (distance < self.nonzero_loss_cutoff)
+        # mapping the mask to the matrix
+        weights = weights / np.sum(weights, axis=1, keepdims=True)  # normalize
+        return weights
+
+    def sampling(self, vectors, weights):
+        a_indices = []
+        p_indices = []
+        n_indices = []
+        # encoding all the input to the vectors, but only output part of them for compute loss
+        # the select method according to the weight based probabilities.
+
+        n = len(vectors)
+        print(n)
+        for i in range(len(vectors)):
+            block_idx = i // self.k  # which block that this data belong
+
+            try:
+                n_indices += np.random.choice(n, self.k - 1, p=weights[i]).tolist()
+            except:
+                n_indices += np.random.choice(n, self.k - 1).tolist()
+            for j in range(block_idx * self.k, (block_idx + 1) * self.k):
+                if j != i:
+                    a_indices.append(i)
+                    p_indices.append(j)
+
+        # print("p_indices \n%s" % str(p_indices))
+        # print("n_indices \n%s" % str(n_indices))
+        # print('a_indices \n%s' % str(a_indices))
+        return vectors[a_indices], vectors[p_indices], vectors[n_indices]
+
+
+'''
+import algorithm_models.verify_model as vm
+from weight_based_sampling_demo import model as wm
+import torch
+import  numpy as np
+import mxnet as mx
+import mxnet.ndarray as nd
+arr = torch.from_numpy(np.array([[1.,1.,1.,],
+                                 [2.,2.,2.,],
+                                 [3.,3.,3.,],
+                                 [1.,2.,3.],
+                                 [2.1,1.1,2.3],
+                                 [1,2,2.1],
+                                 [1.4,2.1,.6],
+                                 [1.4,2.4,1.],
+                                 [1.6,.9,1.],
+                                 [1.44,2.1,.98],
+                                 [.88,1.1,1.777],
+                                 [.4,.9,1.1]])).double()
+arr_mx = nd.array(arr)
+vm.L2Normalize(arr)
+wsl = wm.MarginSampler(3)
+my_wsl = vm.WeightSamplingLayer(3)
+'''

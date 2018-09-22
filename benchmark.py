@@ -5,15 +5,12 @@ import time
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 
+from algorithm_models.CNN_model import CNN
+from algorithm_models.verify_model import SiameseNetwork
 from process_data_dev import DATA_DIR_PATH
-from .algorithm_models.CNN_model import CNN
-from .algorithm_models.verify_model import SiameseNetwork
 
-
-# todo:
-# 1. try save dict model,
-# 2.save all module
 
 class Benchmark:
     def __init__(self):
@@ -21,10 +18,10 @@ class Benchmark:
         load_model_param(self.classify_m, 'cnn')
         self.verify_m = SiameseNetwork(train=False)
         load_model_param(self.verify_m, 'verify')
-
-        self.classify_m.double()
-        self.classify_m.eval()  # dont forget switch to eval
-
+        self.verify_m.single_output()
+        self.reference_vectors = os.path.join(DATA_DIR_PATH, 'reference_verify_vector')
+        with open(self.reference_vectors, 'rb') as f:
+            self.reference_vectors = pickle.load(f)
         with open(os.path.join(DATA_DIR_PATH, 'new_train_data'), 'rb') as f:
             offline_test_data = pickle.load(f)
 
@@ -48,7 +45,12 @@ class Benchmark:
         inference_res = torch.nn.functional.softmax(inference_res, dim=1)
         # print('raw output %s' % str(inference_res))
         inference_res = get_max_index(inference_res).item()
-        print('inference label %s\n' % str(inference_res))
+        print('inference label %s' % str(inference_res))
+        verify_vector = self.verify_m(test_data)
+        refer_vector = torch.from_numpy(self.reference_vectors[inference_res])
+        dis = F.pairwise_distance(verify_vector, refer_vector)
+        print('dis: %f\n' % dis.item())
+
 
 
 def get_max_index(tensor):
@@ -75,10 +77,10 @@ def load_model_param(model, model_name):
 
 def main():
     b = Benchmark()
-    for i in range(200):
+    for i in range(2):
         start = time.clock()
         b.offline_test()
-        print(time.clock() - start)
+        print('cost time %f' % (time.clock() - start))
 
 
 if __name__ == '__main__':

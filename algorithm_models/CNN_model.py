@@ -152,3 +152,4 @@ def get_max_index(tensor):
 def output_len(Lin, padding, kernel_size, stride):
     Lout = (Lin + 2 * padding - (kernel_size - 1) - 1) / stride + 1
     return Lout
+

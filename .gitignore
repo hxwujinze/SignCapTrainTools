@@ -1,5 +1,6 @@
 data/*
 !data/well_model
-/algorithm_models/facenet-master/*
+/facenet-master/*
 /tensorflow_learning/log/*
 /tensorflow_learning/MNIST_data/*
+/weight_based_sampling_demo/*
