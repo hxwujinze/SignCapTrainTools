@@ -99,7 +99,7 @@ def feature_extract_single_polyfit(data, compress):
     :return: after fitting data 3 dim, but data len in each dim has changed by compress rate
     """
     seg_poly_fit = None
-    window_range = 16
+    window_range = 12
     start_ptr = 0
     end_ptr = window_range
     while end_ptr <= len(data):
@@ -109,7 +109,7 @@ def feature_extract_single_polyfit(data, compress):
         y = window_data
         # 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15
         # 0   2   4   6   8   10    11    14
-        poly_args = np.polyfit(x, y, 3)
+        poly_args = np.polyfit(x, y,2)
         for each_channel in range(3):
             dots_in_channel = None
             window_poly = np.poly1d(poly_args[:, each_channel])
@@ -125,21 +125,27 @@ def feature_extract_single_polyfit(data, compress):
             else:
                 window_extract_data = np.hstack((window_extract_data, dots_in_channel))
 
-        # assemble each window data
+        # # assemble each window data
         if seg_poly_fit is None:
-            seg_poly_fit = np.vstack((window_extract_data[0:4], window_extract_data[4:8]/2))
+            seg_poly_fit = np.vstack((window_extract_data[0:2], window_extract_data[2:4]/2))
+            seg_poly_fit = np.vstack((seg_poly_fit, window_extract_data[4:6] / 3))
         else:
-            seg_poly_fit[seg_poly_fit.shape[0]-4:seg_poly_fit.shape[0]] += window_extract_data[0:4]/2
-            if end_ptr == len(data):
-                seg_poly_fit = np.vstack((seg_poly_fit, window_extract_data[4:8]))
+            if seg_poly_fit.shape[0] == 6:
+                seg_poly_fit[seg_poly_fit.shape[0]-4:seg_poly_fit.shape[0]-2] += window_extract_data[0:2] / 2
+                seg_poly_fit[seg_poly_fit.shape[0]-2:seg_poly_fit.shape[0]] += window_extract_data[2:4] / 3
             else:
-                seg_poly_fit = np.vstack((seg_poly_fit, window_extract_data[4:8]/2))
+                seg_poly_fit[seg_poly_fit.shape[0]-4:seg_poly_fit.shape[0]] += window_extract_data[0:4]/3
+            if end_ptr == len(data):
+                seg_poly_fit = np.vstack((seg_poly_fit, window_extract_data[2:4]/2))
+                seg_poly_fit = np.vstack((seg_poly_fit, window_extract_data[4:6]))
+            else:
+                seg_poly_fit = np.vstack((seg_poly_fit, window_extract_data[4:6]/3))
         # if seg_poly_fit is None:
-        #      seg_poly_fit = window_extract_data
+        #     seg_poly_fit = window_extract_data
         # else:
         #     seg_poly_fit = np.vstack((seg_poly_fit, window_extract_data))
-        start_ptr += 8
-        end_ptr += 8
+        start_ptr += 4
+        end_ptr += 4
     return seg_poly_fit
 
 def feature_extract_single(input_data, type_name):
