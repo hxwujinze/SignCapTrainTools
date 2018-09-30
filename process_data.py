@@ -127,12 +127,19 @@ def feature_extract_single_polyfit(data, compress):
 
         # assemble each window data
         if seg_poly_fit is None:
-            seg_poly_fit = window_extract_data
+            seg_poly_fit = np.vstack((window_extract_data[0:4], window_extract_data[4:8]/2))
         else:
-            seg_poly_fit = np.vstack((seg_poly_fit, window_extract_data))
-        start_ptr += window_range
-        end_ptr += window_range
-
+            seg_poly_fit[seg_poly_fit.shape[0]-4:seg_poly_fit.shape[0]] += window_extract_data[0:4]/2
+            if end_ptr == len(data):
+                seg_poly_fit = np.vstack((seg_poly_fit, window_extract_data[4:8]))
+            else:
+                seg_poly_fit = np.vstack((seg_poly_fit, window_extract_data[4:8]/2))
+        # if seg_poly_fit is None:
+        #      seg_poly_fit = window_extract_data
+        # else:
+        #     seg_poly_fit = np.vstack((seg_poly_fit, window_extract_data))
+        start_ptr += 8
+        end_ptr += 8
     return seg_poly_fit
 
 def feature_extract_single(input_data, type_name):
@@ -419,7 +426,7 @@ class DataScaler:
         self.scale_datas[type_name] = (self.scaler.min_, self.scaler.scale_)
 
     def split_scale_vector(self, scale_name, vector_names, vector_range):
-        """
+        self.scale_ = """
         拆分scale vactor  生成是将模型各个特征输入拼接到一起生成的vector
         为了便于使用， 将不同特征的数据拆开
         :param scale_name: 被拆开的scale
