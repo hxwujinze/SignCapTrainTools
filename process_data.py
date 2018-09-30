@@ -25,12 +25,9 @@ TYPE_LEN = {
 def feature_extract(data_set, type_name):
     """
     特征提取 并进行必要的归一化
-
     acc gyr数据的三种特征量纲相差不大 且有某些维度全局的值都很相近的情况
     于是暂时去除归一化的操作 拟对只对数据变化较大，且变化范围较大于1的数据维度进行部分归一化
-
     emg数据照常进行各种处理
-
     :param data_set: 来自Load_From_File过程的返回值 一个dict
                      包含一个手语 三种采集数据类型的 多次采集过程的数据
     :param type_name: 数据采集的类型 决定nparray的长度
@@ -91,7 +88,6 @@ def feature_extract_single_polyfit(data, compress):
     16 points window and 3-order poly fit
     compress mean take out some point in sequence according to fix length internal,
     likes down sampling
-
     :param data: data mat contains three channel data
     :param compress: compress ratio, the sampling window
             # 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15  rate = 2
@@ -109,7 +105,7 @@ def feature_extract_single_polyfit(data, compress):
         y = window_data
         # 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15
         # 0   2   4   6   8   10    11    14
-        poly_args = np.polyfit(x, y,2)
+        poly_args = np.polyfit(x, y, 3)
         for each_channel in range(3):
             dots_in_channel = None
             window_poly = np.poly1d(poly_args[:, each_channel])
@@ -125,7 +121,7 @@ def feature_extract_single_polyfit(data, compress):
             else:
                 window_extract_data = np.hstack((window_extract_data, dots_in_channel))
 
-        # # assemble each window data
+        # assemble each window data
         if seg_poly_fit is None:
             seg_poly_fit = np.vstack((window_extract_data[0:2], window_extract_data[2:4]/2))
             seg_poly_fit = np.vstack((seg_poly_fit, window_extract_data[4:6] / 3))
@@ -146,6 +142,7 @@ def feature_extract_single_polyfit(data, compress):
         #     seg_poly_fit = np.vstack((seg_poly_fit, window_extract_data))
         start_ptr += 4
         end_ptr += 4
+
     return seg_poly_fit
 
 def feature_extract_single(input_data, type_name):
@@ -432,7 +429,7 @@ class DataScaler:
         self.scale_datas[type_name] = (self.scaler.min_, self.scaler.scale_)
 
     def split_scale_vector(self, scale_name, vector_names, vector_range):
-        self.scale_ = """
+        """
         拆分scale vactor  生成是将模型各个特征输入拼接到一起生成的vector
         为了便于使用， 将不同特征的数据拆开
         :param scale_name: 被拆开的scale
@@ -491,7 +488,6 @@ scale数组中实际存储的是最大值减最小值的倒数  值越大 说明
 min 数组中存的是最小值 乘以scale 数组的值 相当于数据基准偏移量
 数据一般都有一个小偏移量 所以数据最好都进行一下偏移修正
 在不进行scale时 偏移量应还原成数据自身的偏移量 所以做之前乘法的逆运算 获取原始偏移量
-
 """
 
 def scale_adjust(threshold, default_scale):
@@ -511,4 +507,3 @@ def scale_adjust(threshold, default_scale):
             # 当最大最小值不满足一般数据规律时 设置为默认归一化的scale
             curr_min[each_val] = curr_min[each_val] * default_scale / curr_scale[each_val]
             curr_scale[each_val] = default_scale
-
